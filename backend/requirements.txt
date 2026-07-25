@@ -1,0 +1,8 @@
+# ORBIT backend — Phase 2+ dependencies.
+# Install with: pip install -r requirements.txt
+#
+# pyserial is only needed once real hardware (Phase 1) is flashed and
+# plugged in — everything else here works fully offline against the mock
+# generator in scripts/mock/.
+
+pyserial==3.5

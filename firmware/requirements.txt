@@ -1,0 +1,12 @@
+# Tools needed to build and flash the ORBIT firmware.
+# Install with: pip install -r requirements.txt
+#
+# This does NOT include the ESP32 toolchain itself — `pio run` downloads
+# that automatically (via the espressif32 platform) on first build, which
+# needs an internet connection the first time you build each environment.
+#
+# This also does NOT include the Phase 2 backend's Python packages
+# (pyserial, fastapi, etc.) — those get their own requirements.txt inside
+# backend/ once we start that phase.
+
+platformio>=6.1.13

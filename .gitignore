@@ -1,0 +1,28 @@
+# --- Firmware / PlatformIO ---
+firmware/.pio/
+*.o
+*.d
+*.a
+*.bin
+
+# --- Python ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# --- Runtime data (regenerated, don't commit) ---
+data/
+backend/*.db
+backend/orbit.db
+
+# --- Dashboard (once Phase 5 lands) ---
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.env
+
+# --- OS / editor cruft ---
+.DS_Store
+.vscode/
+*.swp
