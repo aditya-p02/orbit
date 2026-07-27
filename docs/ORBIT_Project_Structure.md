@@ -25,6 +25,7 @@ orbit/
 │   ├── ORBIT_Project_Structure.md                     [DONE]  ← this file
 │   ├── ORBIT_Software_Roadmap.md                      [DONE]
 │   ├── ORBIT_Team_Roadmap_v2.md                       [DONE]
+│   ├── ORBIT_Dashboard_Design.md                      [DONE]  ← full dashboard layout, visual design, component guide
 │   ├── ORBIT_Design_Document_v1_2.docx                [DONE]  ← design doc (external copy added below)
 │   └── evidence_weight_reference.md                   [PENDING] ← weight table quick reference
 │
@@ -65,12 +66,12 @@ orbit/
 │   │   │   ├── oui_lookup.py                          [DONE]  ← static OUI → vendor table
 │   │   │   └── ble_parser.py                          [PENDING] ← BLE advertisement parser (Stage 4)
 │   │   │
-│   │   ├── detection/                                 (Stage 1 — NOT STARTED)
+│   │   ├── detection/                                 (Stage 1 — DONE)
 │   │   │   ├── __init__.py                            [DONE]  ← empty
-│   │   │   ├── whitelist.py                           [PENDING] ← trusted SSID+BSSID store
-│   │   │   ├── state_machine.py                       [PENDING] ← per-device Unknown→Watching→Suspicious→Flagged
-│   │   │   ├── evidence.py                            [PENDING] ← all evidence checkers + scoring
-│   │   │   ├── engine.py                              [PENDING] ← main detection loop, consumes ingestion queue
+│   │   │   ├── whitelist.py                           [DONE]  ← trusted SSID+BSSID store
+│   │   │   ├── state_machine.py                       [DONE]  ← per-device Unknown→Watching→Suspicious→Flagged
+│   │   │   ├── evidence.py                            [DONE]  ← Stage 1 evidence checkers + scoring
+│   │   │   ├── engine.py                              [DONE]  ← main detection loop, consumes ingestion queue
 │   │   │   ├── karma.py                               [PENDING] ← Karma / probe-response attack detection (Stage 2)
 │   │   │   ├── handshake.py                           [PENDING] ← WPA handshake-capture-attempt detection (Stage 2)
 │   │   │   ├── ble_correlation.py                     [PENDING] ← BLE+WiFi RSSI trend correlation (Stage 4)
@@ -178,7 +179,7 @@ Recommended: copy both into docs/ folder so they live with the codebase.
 | Ingestion | frame_source.py, serial_reader.py | DONE |
 | Parsing (WiFi) | frame_parser.py, rsn_parser.py, oui_lookup.py | DONE |
 | Mock sniffer | ap_world.py, frame_builders.py, mock_sniffer.py | DONE |
-| Detection engine | whitelist, state machine, evidence, engine | NOT STARTED |
+| Detection engine | whitelist, state machine, evidence, engine | DONE |
 | Karma detection | karma.py | NOT STARTED |
 | WPA handshake detection | handshake.py | NOT STARTED |
 | Storage | db.py, models.py, queries.py | NOT STARTED |

@@ -1,0 +1,343 @@
+# ORBIT — Dashboard Design Guide
+
+**Last updated:** July 27, 2026
+**Owner:** Reya (dashboard) — read in full before writing a single line of code
+**Purpose:** Every visual and functional detail of the ORBIT dashboard.
+             Follow this exactly. Do not invent layout decisions on your own.
+
+---
+
+## Goal
+
+The dashboard has two audiences:
+
+1. The evaluator / examiner — they look at the screen for 5 minutes and decide
+   if this is impressive and well-built. First impression is everything.
+2. The team — they need to see in real time that both nodes are alive, frames
+   are flowing, and any detected threats appear immediately.
+
+Both audiences need the same thing: transparency. Everything that is happening
+inside the system must be visible on screen at all times. No black boxes.
+
+---
+
+## Visual theme
+
+Dark background. Not pitch black — use a very dark navy/slate (#0d1117 or #0f172a).
+Accent colour: electric blue (#3b82f6) or cyan (#06b6d4). Pick one and use it
+consistently for highlights, borders on active cards, and score bars.
+Alert colours:
+  - Flagged (score 70+): red (#ef4444)
+  - Suspicious (score 40-69): amber (#f59e0b)
+  - Watching (score 20-39): yellow (#eab308)
+  - Unknown (score 0-19): grey (#6b7280)
+
+Text: white (#f8fafc) for primary, light grey (#94a3b8) for secondary/labels.
+Font: Inter or system-ui. Clean, modern, readable at a glance.
+Cards: slightly lighter than background (#1e293b), 8px border radius, subtle border.
+
+This is a security operations dashboard — it should look like one.
+Think Grafana, think Splunk, think professional SOC tooling. Not a college project
+with a white background and Bootstrap buttons.
+
+---
+
+## Layout — overall
+
+Single page. No page navigation except login → dashboard.
+The dashboard is one full screen, divided into regions:
+
+```
++--------------------------------------------------+
+|  ORBIT  [node status bar]          [logout]      |  ← top bar (48px)
++--------------------------------------------------+
+|          |                         |             |
+| Device   |   Alert Feed            |  Node       |
+| Table    |   (centre, most space)  |  Health     |
+| (left)   |                         |  + Heatmap  |
+|          |                         |  (right)    |
++--------------------------------------------------+
+|  Threat Timeline (bottom, full width)            |
++--------------------------------------------------+
+```
+
+Proportions (approximate):
+- Left column (Device Table): 25% width
+- Centre column (Alert Feed): 45% width
+- Right column (Node Health + Heatmap): 30% width
+- Bottom strip (Threat Timeline): full width, 200px height, collapsible
+
+---
+
+## Top bar
+
+Always visible. Contains:
+
+- Left: ORBIT logo text (just the word "ORBIT" in the accent colour, bold, 20px)
+- Centre: Node status bar — two pill badges side by side
+    - "Node A  ●  LIVE" — green dot if connected, red dot if disconnected
+    - "Node B  ●  LIVE" — same
+    - Queue depth number next to each: "Queue: 12 frames"
+    - These update in real time via WebSocket
+- Right: logged-in username + logout button
+
+If a node goes offline, its pill turns red and pulses. This is the first thing
+an evaluator will notice — it proves the system is actually monitoring hardware.
+
+---
+
+## Left column — Device Table
+
+Title: "Detected Devices"
+
+A live table. Columns:
+  - State (coloured badge: FLAGGED / SUSPICIOUS / WATCHING / UNKNOWN)
+  - SSID
+  - BSSID (MAC address)
+  - Vendor (from OUI lookup — e.g. "Espressif", "TP-Link")
+  - Score (number, colour-coded)
+  - Last Seen (relative time — "3s ago", "12s ago")
+
+Rows update in real time via WebSocket. New rows appear at the top with a
+brief highlight flash (1 second accent colour background) so it is obvious
+something new arrived.
+
+Clicking a row filters the Threat Timeline at the bottom to show only that
+device's events.
+
+Row colour:
+- FLAGGED rows: left border 3px red, row background slightly reddish
+- SUSPICIOUS: amber left border
+- WATCHING: yellow left border
+- UNKNOWN: no special colour
+
+No pagination for the demo — the demo scenario has at most 5-6 devices.
+
+---
+
+## Centre column — Alert Feed
+
+Title: "Alerts"
+
+This is the most important panel. Evaluators will look here when a threat
+is detected.
+
+Each alert is a card. Cards are ordered newest first.
+
+### Alert card structure
+
+```
++--------------------------------------------------+
+|  [FLAGGED]  HomeNet-5G                  14:23:01 |
+|  BSSID: AA:BB:CC:DD:EE:FF  |  Vendor: Espressif  |
+|  Confidence Score: 70 / 100  [========= ] red bar |
+|                                                   |
+|  Evidence breakdown:                              |
+|  ✗  SSID collision          +30  (BSSID not in   |
+|                                   trusted list)   |
+|  ✗  Security downgrade      +25  (WPA2 → Open)   |
+|  ✗  Channel mismatch        +15  (ch 6 → ch 11)  |
+|                                                   |
+|  [AI narration — generated by phi3:mini via Ollama]           |
+|  "This device is broadcasting a trusted network name with no  |
+|   security on the wrong channel — strong indicators of an     |
+|   Evil Twin attack."                                          |
+|   channel with no security — consistent with an   |
+|   Evil Twin attack."                              |
+|                                                   |
+|  [Mark Resolved]  [Add to Whitelist]             |
++--------------------------------------------------+
+```
+
+Key rules for the alert card:
+- NEVER collapse the evidence to just a threat name. Show every rule that fired,
+  its score contribution, and a one-line reason. This is called "explainable alerts"
+  and it is literally in the submitted synopsis — evaluators will check for it.
+- The confidence score bar fills proportionally (70/100 = 70% filled, red).
+AI narration line is shown only if the backend provides it (loaded from
+SQLite cache, generated by phi3:mini via Ollama during development).
+If the backend returns no narration for an alert: hide the section entirely —
+do not show a placeholder or loading spinner.
+- "Mark Resolved" calls POST /alerts/{id}/resolve. Card gets a RESOLVED badge
+  and moves to the bottom of the feed.
+- "Add to Whitelist" calls POST /whitelist with the BSSID. Card gets a
+  WHITELISTED badge.
+
+### New alert animation
+
+When a new FLAGGED alert arrives via WebSocket:
+- The card slides in from the top
+- Screen flashes a brief red tint (200ms, very subtle — not jarring)
+- A sound is NOT needed — this is a demo room, keep it clean
+
+---
+
+## Right column — Node Health + Heatmap
+
+### Node Health panel (top of right column)
+
+Two cards stacked vertically, one per node.
+
+Each card shows:
+- Node ID (A or B)
+- Status: LIVE (green) / OFFLINE (red) / RECONNECTING (amber)
+- Frames received (total count since pipeline start)
+- Frames per second (rolling average, last 5 seconds)
+- Queue depth
+- Last frame received: "0.3s ago"
+
+This panel is what proves to evaluators that real data is flowing.
+If both nodes show 10-20 frames/sec and the timestamps are ticking, the system
+is clearly alive and processing.
+
+### Heatmap panel (below Node Health, Stage 4)
+
+Title: "Proximity Estimate"
+
+Shows a simple top-down floor plan of the demo room as a background image.
+On top of it:
+- Node A marker (blue circle labelled "A") at its physical corner
+- Node B marker (blue circle labelled "B") at its physical corner
+- For each suspicious/flagged device: a highlighted zone (semi-transparent
+  red/amber circle) showing the estimated location based on RSSI from both nodes
+
+The zone updates as RSSI changes. It will drift and pulse slightly — this is
+realistic and looks impressive in a demo.
+
+For midsem: this panel shows "Heatmap available in final build" placeholder.
+For final demo: fully wired to the KNN backend output.
+
+The floor plan image is a simple PNG drawn by the team before the demo —
+just a rectangle with two corner dots marked for Node A and Node B.
+Keep it minimal. It does not need to be architectural — just enough to
+show spatial context.
+
+---
+
+## Bottom strip — Threat Timeline
+
+Title: "Threat Timeline"  [collapse/expand arrow on right]
+
+A horizontal scrollable chronological feed of events, oldest left, newest right.
+Each event is a small labelled dot on a horizontal line:
+
+```
+─────●────────────●──────────────●───────────────●────────────●────>
+  SSID collision  Channel mismatch  Security down  Score=40    Score=70
+  t=0s            t=0s              t=0s           SUSPICIOUS  FLAGGED
+```
+
+Clicking a dot shows a tooltip with full event detail.
+If a device is selected in the Device Table, the timeline filters to show
+only that device's events.
+
+This is the feature that makes the system feel like a real IDS.
+Evaluators can trace exactly how the device moved from Unknown to Flagged,
+step by step, in order. That is the story of the detection playing out visually.
+
+---
+
+## Login page
+
+Simple, clean. Centred card on the dark background.
+- ORBIT logo (large, accent colour)
+- Username field
+- Password field
+- Login button (accent colour, full width inside card)
+- No "register" — credentials are hardcoded for the demo (set before demo day)
+
+After login: redirect to dashboard. Session stored in a cookie or localStorage token.
+All API routes are protected — without the token, the API returns 401 and the
+frontend redirects to login.
+
+---
+
+## WebSocket behaviour
+
+The frontend maintains one persistent WebSocket connection to /ws/live.
+Messages from the server are JSON objects with a "type" field:
+
+  type: "device_update"  → refresh the Device Table row for that MAC
+  type: "alert"          → prepend a new Alert card to the Alert Feed
+  type: "node_status"    → update the Node Health panel for that node
+  type: "timeline_event" → append an event dot to the Threat Timeline
+
+If the WebSocket drops: show a small amber banner at the top "Reconnecting..."
+and attempt reconnect every 3 seconds. Do not show an error — just reconnect
+silently and remove the banner when back.
+
+---
+
+## Tech stack for dashboard
+
+React (preferred). Use Vite for the build tool — faster than Create React App.
+
+Libraries allowed:
+- recharts or chart.js — for the score bar and any graphs
+- react-konva or plain HTML5 canvas — for the heatmap floor plan overlay
+- date-fns — for relative timestamps ("3s ago")
+- No heavy UI component libraries (no Material UI, no Ant Design) —
+  build the cards and table manually with CSS. This keeps the look custom
+  and not generic.
+
+Tailwind CSS is allowed and recommended for the dark theme utility classes.
+
+AI narration: served from backend cache (SQLite). Generated offline by
+phi3:mini via Ollama. Frontend just renders the string — no Ollama calls
+from the frontend side ever.
+
+---
+
+## What the examiner sees in 5 minutes
+
+1. Login screen → clean, professional
+2. Dashboard loads → two nodes showing LIVE in the top bar
+3. Device table shows 2-3 known APs being monitored (Unknown state, score 0)
+4. Team triggers the evil twin
+5. A new device appears in the table with a highlight flash
+6. Score climbs: 30 → 45 → 70
+7. State changes: Unknown → Watching → Suspicious → FLAGGED
+8. Alert card slides into the Alert Feed — FLAGGED badge, full evidence breakdown
+9. Heatmap zone appears at the far corner (where the evil twin is)
+10. Threat Timeline shows the sequence of rules that fired, in order
+11. Examiner can read every rule that fired, every score contribution
+12. Team clicks "Mark Resolved" — card updates to RESOLVED
+
+That sequence, running smoothly, is a passing grade on its own.
+Every step of it must work before demo day.
+
+---
+
+## Files to build (Reya's task)
+
+All under dashboard/src/
+
+| File | What it does | Stage |
+|---|---|---|
+| App.js | Root component, auth guard, routing | Stage 3 |
+| Login.js | Login form, token storage | Stage 3 |
+| DeviceTable.js | Live device list, row colours, click to filter | Stage 3 |
+| AlertFeed.js | Alert cards, new alert animation | Stage 3 |
+| EvidenceDetail.js | Evidence breakdown rows inside alert card | Stage 3 |
+| NodeHealth.js | Per-node status card, frames/sec counter | Stage 3 |
+| ThreatTimeline.js | Horizontal event timeline, tooltip on click | Stage 3 |
+| Heatmap.js | Floor plan canvas + device zone overlay | Stage 4 |
+| AlertNarration.js | AI narration line inside alert card | Stage 4 |
+| services/api.js | fetch wrappers for all REST endpoints | Stage 3 |
+| services/websocket.js | WebSocket client with reconnect logic | Stage 3 |
+
+Build order: Login → NodeHealth → DeviceTable → AlertFeed + EvidenceDetail
+→ ThreatTimeline → wire WebSocket → Heatmap → AlertNarration
+
+Do not build everything at once. Get Login + DeviceTable + AlertFeed working
+against hardcoded fake data first. Then wire the real API. Then add WebSocket.
+Then the timeline. Then the heatmap last.
+
+---
+
+## Before writing any code — read these
+
+- ORBIT_Software_Roadmap.md Stage 3c — dashboard feature requirements
+- ORBIT_Team_Roadmap_v2.md Teammate 2 section — your full task list
+- Ask Kuldeep for the exact JSON shape of GET /alerts and GET /devices responses
+  before building the components — do not guess the field names
