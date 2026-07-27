@@ -1,6 +1,6 @@
 # ORBIT backend
 
-## What's built (Phase 2 — ingestion & parsing)
+## What's built
 
 - `orbit/ingestion/frame_source.py` — abstraction over "where frames come
   from." `SerialFrameSource` (real hardware, not usable yet),
@@ -23,15 +23,34 @@
   `--evil-twin-at` seconds (default 20s) plus a deauth burst against a
   simulated client. Output is JSON lines, identical in shape to what
   `orbit_sniffer_emit()` sends over serial on real hardware.
+- `orbit/detection/whitelist.py` — in-memory trusted SSID+BSSID whitelist.
+- `orbit/detection/state_machine.py` — per-device Unknown → Watching →
+  Suspicious → Flagged state machine.
+- `orbit/detection/evidence.py` — Stage 1 evidence rules: SSID collision,
+  security downgrade, channel mismatch, RSSI anomaly, and deauth tracking.
+- `orbit/detection/engine.py` — main Stage 1 detection loop. It consumes the
+  ingestion queue, scores frames, updates device state, and prints alerts with
+  full evidence breakdown.
+- `scripts/run_pipeline.py` — current midsem demo entry point. It wires mock
+  Node A + Node B into ingestion and detection.
 
 ## Not built yet
 
-- `orbit/detection/` — state machine + weighted evidence scoring (Phase 3,
-  owned by Aditya — see team roadmap)
-- `orbit/storage/`, `orbit/api/` — SQLite schema + FastAPI app (Phase 4)
-- Anything BLE, heatmap, or AI-layer (Phases 7-9, later)
+- `orbit/storage/`, `orbit/api/` — SQLite schema + FastAPI app
+- Karma and WPA handshake-capture-attempt detection
+- Anything BLE, heatmap, or AI-layer
 
-## Running it
+## Running the current Stage 1 pipeline
+
+```bash
+cd backend
+python -m scripts.run_pipeline --evil-twin-at 10 --speed 5 --duration 60
+```
+
+Expected result: the engine starts, the trusted `HomeNet-5G` AP is learned,
+the evil twin appears, and ORBIT prints one alert with evidence breakdown.
+
+## Running only the mock sniffers manually
 
 Terminal 1:
 ```bash

@@ -9,19 +9,26 @@ Current team split: `docs/ORBIT_Team_Roadmap_v2.md`
 
 ## Status right now
 
-No physical hardware yet, so **Phase 1 (firmware) is paused, not blocking**.
-Everything from Phase 2 onward runs against a mock sensor node that emits
-real, byte-accurate 802.11 frames in the exact JSON format the firmware
-will eventually send over serial — you can develop and test the full
-backend pipeline with zero hardware. See `backend/README.md` to get that
-running immediately.
+Stage 1 detection is complete on the software/mock pipeline. No physical
+hardware is required for the current midsem path: the mock sensor nodes emit
+real, byte-accurate 802.11 frames in the exact JSON format the firmware will
+eventually send over serial.
+
+Current working path:
+- mock Node A + Node B
+- ingestion queue
+- 802.11 parser
+- Stage 1 detection engine
+- console alert with full evidence breakdown
+
+See `backend/README.md` to run the verified pipeline.
 
 ## Layout
 
 ```
-firmware/    ESP32 sniffer firmware (Arduino/PlatformIO) — Phase 0-1
-backend/     Python: ingestion, parsing, detection engine, API — Phase 2-4, 6, 9
-dashboard/   (not started yet) React dashboard — Phase 5, 8
+firmware/    ESP32 sniffer firmware (Arduino/PlatformIO) — hardware path
+backend/     Python: ingestion, parsing, detection engine, API
+dashboard/   (not started yet) React dashboard
 docs/        Design doc, roadmap, team split
 ```
 
@@ -29,13 +36,10 @@ docs/        Design doc, roadmap, team split
 
 ```bash
 cd backend
-pip install -r requirements.txt --break-system-packages   # or use a venv
-python -m scripts.mock.mock_sniffer --node A &
-python -m scripts.mock.mock_sniffer --node B &
+python -m scripts.run_pipeline --evil-twin-at 10 --speed 5 --duration 60
 ```
 
-See `backend/README.md` for how to wire those into the ingestion queue and
-what's already built vs. still open.
+See `backend/README.md` for details on what's already built vs. still open.
 
 ## Getting started (firmware, once hardware's in hand)
 
