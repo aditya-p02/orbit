@@ -7,15 +7,12 @@ main_node_b.cpp: Node A hops channels 1-11 every 300ms, Node B stays parked
 on the home channel. Output is line-by-line JSON on stdout, byte-identical
 in shape to what orbit_sniffer_emit() sends over serial.
 
-Usage:
-    python -m scripts.mock.mock_sniffer --node A
-    python -m scripts.mock.mock_sniffer --node B
-
-Caveat: sequence-number consistency for a given BSSID across the two node
-processes relies on both being started at roughly the same wall-clock
-moment (each tracks elapsed time independently, not via shared IPC). Good
-enough for Phase 2/3 development; if Phase 3's sequence-continuity check
-turns out to need tighter cross-node sync, revisit with a shared clock file.
+Stage 2 additions:
+  - EAPOL frames emitted after deauth bursts (handshake-capture detection)
+  - Karma AP probe responses for multiple SSIDs
+  - RSSI variation over time (device moving closer)
+  - Second rogue AP appears at t=60s
+  - Beacon timing jitter (±10ms)
 """
 
 from __future__ import annotations
@@ -31,6 +28,7 @@ from scripts.mock import ap_world as world
 from scripts.mock.frame_builders import (
     build_beacon_or_probe_resp,
     build_deauth,
+    build_eapol,
     build_probe_req,
     build_rsn_ie,
     build_wps_vendor_ie,
@@ -43,11 +41,19 @@ NODE_A_DWELL_MS = 300                  # matches kDwellMs in main_node_a.cpp
 NODE_B_HOME_CHANNEL = world.TRUSTED_AP.channel  # matches ORBIT_HOME_CHANNEL
 
 TICK_MS = 50
-BEACON_PERIOD_MS = 100  # ~ standard 100 TU beacon interval, rounded for sim simplicity
+BEACON_PERIOD_MS = 100  # ~100 TU beacon interval
 PROBE_PERIOD_MS = 3000
 DEAUTH_BURST_PERIOD_MS = 15000
 DEAUTH_BURST_COUNT = 5
-DEAUTH_BURST_GAP_MS = 100
+DEAUTH_BURST_GAP_MS = 20    # 20ms gap (within a single ch11 dwell at typical sim speeds)
+EAPOL_DELAY_MS = 500   # EAPOL follows the deauth burst by ~500ms
+
+# Karma: how often we emit fake probe responses for alternate SSIDs
+KARMA_PROBE_RESP_PERIOD_MS = 5000
+
+# BLE: fake BLE advertisement from the evil twin (same physical device)
+BLE_ADV_PERIOD_MS = 2000
+BLE_EVIL_ADDR = "EE:11:22:33:44:55"   # fake stable BLE addr for the attacker device
 
 
 def emit(node_id: str, rssi: int, channel: int, raw: bytes) -> None:
@@ -76,8 +82,68 @@ def emit(node_id: str, rssi: int, channel: int, raw: bytes) -> None:
     sys.stdout.flush()
 
 
-def simulate_rssi(base_rssi: int, rng: random.Random) -> int:
-    return max(-95, min(-20, base_rssi + rng.randint(-4, 4)))
+def emit_eapol(node_id: str, channel: int, bssid: str, client_mac: str, seq_num: int) -> None:
+    """Emit an EAPOL envelope directly as JSON (synthetic frame type)."""
+    envelope = build_eapol(bssid=bssid, client_mac=client_mac, seq_num=seq_num)
+    envelope["node"] = node_id
+    envelope["rssi"] = -55
+    envelope["ch"] = channel
+    envelope["len"] = 0
+    envelope["data"] = ""
+    sys.stdout.write(json.dumps(envelope) + "\n")
+    sys.stdout.flush()
+
+
+def emit_ble(node_id: str, address: str, rssi: int) -> None:
+    """Emit a fake BLE advertisement envelope as JSON."""
+    line = {
+        "node": node_id,
+        "type": "ble",
+        "address": address,
+        "rssi": rssi,
+        "timestamp": time.time(),
+        # required fields for ingestion (ble frames skip the frame parser path)
+        "ch": 0, "subtype": 0xFE, "seq": 0,
+        "a1": "", "a2": address.replace(":", "").upper(), "a3": "",
+        "len": 0, "data": "",
+    }
+    sys.stdout.write(json.dumps(line) + "\n")
+    sys.stdout.flush()
+
+
+def emit_probe_response(
+    node_id: str, rssi: int, channel: int,
+    bssid: str, ssid: str, seq_num: int,
+) -> None:
+    """Emit a probe response frame — used for Karma simulation."""
+    raw = build_beacon_or_probe_resp(
+        is_probe_resp=True,
+        bssid=bssid,
+        ssid=ssid,
+        channel=channel,
+        seq_num=seq_num,
+        privacy=False,
+        rsn_ie=None,
+    )
+    emit(node_id, rssi, channel, raw)
+
+
+def simulate_rssi(base_rssi: int, rng: random.Random, elapsed_s: float = 0.0, ramp: bool = False) -> int:
+    """
+    With ramp=True: RSSI starts at base_rssi and increases by up to 30 dBm
+    over 30 seconds, simulating a device moving closer.
+    """
+    noise = rng.randint(-4, 4)
+    if ramp:
+        # ramp from base to base+30 over 30s
+        gain = min(30, int(elapsed_s))
+        return max(-95, min(-20, base_rssi + gain + noise))
+    return max(-95, min(-20, base_rssi + noise))
+
+
+def jitter_ms(rng: random.Random) -> int:
+    """±10ms beacon timing jitter to simulate real hardware behaviour."""
+    return rng.randint(-10, 10)
 
 
 def build_ap_beacon_bytes(ap: world.APProfile, seq_num: int) -> bytes:
@@ -96,13 +162,17 @@ def build_ap_beacon_bytes(ap: world.APProfile, seq_num: int) -> bytes:
 
 
 def run(node_id: str, evil_twin_at: float, speed: float, seed: int) -> None:
-    rng = random.Random(seed + (0 if node_id == "A" else 1))  # per-node noise, not schedule
+    rng = random.Random(seed + (0 if node_id == "A" else 1))
     seq_counters = {ap.bssid: 0 for ap in world.ALL_APS}
+    seq_counters[world.KARMA_AP.bssid] = seq_counters.get(world.KARMA_AP.bssid, 0)
     client_seq = 0
+    eapol_seq = 0
 
     start = time.monotonic()
     last_probe_ms = -PROBE_PERIOD_MS
     last_deauth_burst_ms = -DEAUTH_BURST_PERIOD_MS
+    last_karma_resp_ms: dict[str, int] = {}  # ssid -> last ms emitted
+    deauth_burst_done_ms: int | None = None  # when did last burst finish
 
     while True:
         elapsed_s = (time.monotonic() - start) * speed
@@ -114,16 +184,29 @@ def run(node_id: str, evil_twin_at: float, speed: float, seed: int) -> None:
         else:
             current_channel = NODE_B_HOME_CHANNEL
 
-        # --- AP beacons ---
-        if elapsed_ms % BEACON_PERIOD_MS < TICK_MS:
+        # --- AP beacons (with ±10ms jitter) ---
+        jitter = jitter_ms(rng)
+        beacon_phase = (elapsed_ms + jitter) % BEACON_PERIOD_MS
+        if beacon_phase < TICK_MS:
             for ap in world.ALL_APS:
+                if elapsed_s < ap.active_after_s:
+                    continue  # not yet active
                 if ap is world.EVIL_TWIN_AP and elapsed_s < evil_twin_at:
-                    continue  # silent until the attack "starts"
+                    continue  # evil twin silent until attack starts
+                if ap is world.EVIL_TWIN_AP2 and elapsed_s < world.EVIL_TWIN_AP2.active_after_s:
+                    continue
+
                 seq_counters[ap.bssid] += 1
                 if ap.channel == current_channel:
                     raw = build_ap_beacon_bytes(ap, seq_counters[ap.bssid])
-                    base_rssi = -40 if ap.trusted else -55
-                    emit(node_id, simulate_rssi(base_rssi, rng), current_channel, raw)
+
+                    # Evil twin RSSI ramps up (simulates device moving closer)
+                    is_evil = ap in (world.EVIL_TWIN_AP, world.EVIL_TWIN_AP2)
+                    twin_elapsed = max(0.0, elapsed_s - evil_twin_at) if is_evil else 0.0
+                    base = -40 if ap.trusted else -55
+                    rssi = simulate_rssi(base, rng, twin_elapsed, ramp=is_evil)
+
+                    emit(node_id, rssi, current_channel, raw)
 
         # --- occasional client probe request for the home SSID ---
         if elapsed_ms - last_probe_ms >= PROBE_PERIOD_MS:
@@ -146,6 +229,53 @@ def run(node_id: str, evil_twin_at: float, speed: float, seed: int) -> None:
                     )
                     emit(node_id, simulate_rssi(-55, rng), current_channel, raw)
                     time.sleep((DEAUTH_BURST_GAP_MS / 1000) / speed)
+                deauth_burst_done_ms = elapsed_ms
+
+        # --- EAPOL frames ~500ms after deauth burst (Stage 2) ---
+        if (
+            deauth_burst_done_ms is not None
+            and elapsed_ms - deauth_burst_done_ms >= EAPOL_DELAY_MS
+        ):
+            # EAPOL is emitted on whatever channel we're currently listening on —
+            # the client reconnects via probe/auth/assoc and EAPOL can appear
+            # on any channel the AP responds on. For the mock, emit on home ch.
+            eapol_channel = world.TRUSTED_AP.channel
+            for _ in range(4):
+                eapol_seq += 1
+                emit_eapol(
+                    node_id, eapol_channel,
+                    bssid=world.EVIL_TWIN_AP.bssid,
+                    client_mac=world.CLIENT_MAC,
+                    seq_num=eapol_seq,
+                )
+            deauth_burst_done_ms = None  # only emit once per burst
+
+        # --- Karma AP: respond to probes for multiple SSIDs ---
+        if elapsed_s >= world.KARMA_AP.active_after_s and current_channel == world.KARMA_AP.channel:
+            for fake_ssid in world.KARMA_AP_EXTRA_SSIDS:
+                last_ms = last_karma_resp_ms.get(fake_ssid, -KARMA_PROBE_RESP_PERIOD_MS)
+                if elapsed_ms - last_ms >= KARMA_PROBE_RESP_PERIOD_MS:
+                    last_karma_resp_ms[fake_ssid] = elapsed_ms
+                    seq_counters[world.KARMA_AP.bssid] += 1
+                    emit_probe_response(
+                        node_id,
+                        rssi=simulate_rssi(-60, rng),
+                        channel=current_channel,
+                        bssid=world.KARMA_AP.bssid,
+                        ssid=fake_ssid,
+                        seq_num=seq_counters[world.KARMA_AP.bssid],
+                    )
+
+        # --- BLE advertisement from evil twin device (Stage 4) ---
+        # The evil twin AP and a BLE device are carried by the same attacker.
+        # BLE RSSI ramps up alongside the Wi-Fi RSSI as attacker moves closer.
+        if elapsed_s >= evil_twin_at:
+            last_ble_ms = last_karma_resp_ms.get("__ble__", -BLE_ADV_PERIOD_MS)
+            if elapsed_ms - last_ble_ms >= BLE_ADV_PERIOD_MS:
+                last_karma_resp_ms["__ble__"] = elapsed_ms
+                twin_elapsed = max(0.0, elapsed_s - evil_twin_at)
+                ble_rssi = simulate_rssi(-70, rng, twin_elapsed, ramp=True)
+                emit_ble(node_id, BLE_EVIL_ADDR, ble_rssi)
 
         time.sleep((TICK_MS / 1000) / speed)
 

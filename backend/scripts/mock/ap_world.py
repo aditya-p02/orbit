@@ -12,11 +12,14 @@ Scenario:
   - Evil twin of HomeNet-5G: same SSID, DIFFERENT BSSID, open (no RSN IE at
     all — a stark security downgrade from the real AP), on channel 11.
     Silent until `--evil-twin-at` seconds in, so a passive baseline period
-    exists before the attack starts (useful once Phase 10 wants a genuine
-    false-positive baseline number).
+    exists before the attack starts.
+  - Second rogue AP: appears at t=60s, same SSID again, different BSSID,
+    tests that engine handles multiple simultaneous suspects.
   - One client device that legitimately roams and occasionally probes for
     HomeNet-5G, plus a deauth burst against it once the evil twin goes live
-    (sets up Phase 6 handshake-capture-attempt testing later too).
+    (sets up Stage 2 handshake-capture-attempt detection).
+  - Karma AP: single BSSID answers probe requests for multiple SSIDs,
+    demonstrating Karma attack pattern detection.
 """
 
 from __future__ import annotations
@@ -61,15 +64,44 @@ ROGUE_BACKGROUND_AP = APProfile(
 
 EVIL_TWIN_AP = APProfile(
     name="evil_twin",
-    bssid="AA:BB:CC:00:11:99",  # same vendor-looking prefix, different NIC — deliberately close but not identical
+    bssid="AA:BB:CC:00:11:99",  # same vendor-looking prefix, different NIC
     ssid="HomeNet-5G",           # SAME SSID as the trusted AP — this is the attack
     channel=11,
-    open_network=True,           # no RSN IE at all — stark downgrade vs the real AP's WPA2+PMF
+    open_network=True,           # no RSN IE at all — stark downgrade vs WPA2+PMF
     pmf_capable=False,
     wps=False,
     trusted=False,
 )
 
-ALL_APS = [TRUSTED_AP, ROGUE_BACKGROUND_AP, EVIL_TWIN_AP]
+# Second rogue AP — appears later to test multi-suspect handling
+EVIL_TWIN_AP2 = APProfile(
+    name="evil_twin_2",
+    bssid="BB:CC:DD:00:22:99",
+    ssid="HomeNet-5G",
+    channel=9,
+    open_network=True,
+    pmf_capable=False,
+    wps=False,
+    trusted=False,
+    active_after_s=60.0,        # appears 60s in
+)
+
+# Karma AP — answers probes for multiple SSIDs
+KARMA_AP = APProfile(
+    name="karma_ap",
+    bssid="EE:FF:00:11:22:33",
+    ssid="KarmaNet",             # its own SSID (will also respond to others)
+    channel=6,
+    open_network=True,
+    pmf_capable=False,
+    wps=False,
+    trusted=False,
+    active_after_s=15.0,        # appears 15s in
+)
+
+# SSIDs the Karma AP pretends to be (in addition to its own)
+KARMA_AP_EXTRA_SSIDS = ["HomeNet-5G", "OfficeWiFi", "AndroidAP"]
+
+ALL_APS = [TRUSTED_AP, ROGUE_BACKGROUND_AP, EVIL_TWIN_AP, EVIL_TWIN_AP2, KARMA_AP]
 
 CLIENT_MAC = "12:34:56:78:9A:BC"

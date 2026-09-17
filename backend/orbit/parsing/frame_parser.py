@@ -62,6 +62,7 @@ class ParsedFrame:
     rsn: RSNInfo | None = None
     has_wps_ie: bool = False
     vendor_addr2: str | None = None     # OUI vendor guess for the transmitter/BSSID
+    is_eapol: bool = False              # True for EAPOL 4-way handshake frames (Stage 2)
     parse_ok: bool = True
     parse_error: str | None = None
 
@@ -97,6 +98,24 @@ def parse_frame(envelope: dict, laptop_recv_ts: float) -> ParsedFrame:
                     this line (NOT the ESP32 clock — § design doc §17).
     """
     subtype = envelope["subtype"]
+
+    # Handle synthetic EAPOL envelope (subtype 0xFF, set by mock sniffer / firmware Stage 2)
+    if subtype == 0xFF or envelope.get("eapol"):
+        pf = ParsedFrame(
+            node_id=envelope.get("node", "?"),
+            rssi=envelope.get("rssi", 0),
+            channel_reported=envelope.get("ch", 0),
+            subtype=0xFF,
+            subtype_name="eapol",
+            seq_num=envelope.get("seq", 0),
+            addr1=envelope.get("a1", "").upper(),
+            addr2=envelope.get("a2", "").upper(),
+            addr3=envelope.get("a3", "").upper(),
+            laptop_recv_ts=laptop_recv_ts,
+            is_eapol=True,
+        )
+        return pf
+
     pf = ParsedFrame(
         node_id=envelope["node"],
         rssi=envelope["rssi"],

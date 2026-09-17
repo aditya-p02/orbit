@@ -136,3 +136,31 @@ def build_auth(*, bssid: str, client_mac: str, seq_num: int) -> bytes:
     header = _mgmt_header(ST_AUTH, addr1=bssid, addr2=client_mac, addr3=bssid, seq_num=seq_num)
     fixed = (0).to_bytes(2, "little") + (1).to_bytes(2, "little") + (0).to_bytes(2, "little")
     return header + fixed
+
+
+# ---------------------------------------------------------------------------
+# EAPOL frame (802.11 data + LLC/SNAP + EtherType 0x888E)
+# We model this as a minimal data frame so the parser can identify it.
+# The frame_parser detects EAPOL via the "eapol" key in the JSON envelope
+# (set by the mock sniffer) — we don't need byte-perfect EAPOL internals.
+# ---------------------------------------------------------------------------
+
+FT_DATA = 2
+ST_DATA = 0x00
+
+
+def build_eapol(*, bssid: str, client_mac: str, seq_num: int) -> dict:
+    """
+    Returns a dict envelope (not raw bytes) with an 'eapol' key set to True.
+    The mock sniffer emits this directly as JSON — the parser reads the flag
+    rather than byte-decoding a full 802.11 data frame, which is overkill for
+    ORBIT's detection goal (confirm attempt, not reconstruct handshake content).
+    """
+    return {
+        "subtype": 0xFF,          # synthetic sentinel — EAPOL
+        "a1": bssid.replace(":", "").upper(),       # AP (receiver)
+        "a2": client_mac.replace(":", "").upper(),  # client (transmitter / reconnecting)
+        "a3": bssid.replace(":", "").upper(),       # BSSID
+        "seq": seq_num,
+        "eapol": True,
+    }

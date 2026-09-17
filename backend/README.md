@@ -47,6 +47,12 @@ cd backend
 python -m scripts.run_pipeline --evil-twin-at 10 --speed 5 --duration 60
 ```
 
+You can also run the same entry point from the repository root:
+
+```bash
+python3 backend/scripts/run_pipeline.py --evil-twin-at 10 --speed 5 --duration 60
+```
+
 Expected result: the engine starts, the trusted `HomeNet-5G` AP is learned,
 the evil twin appears, and ORBIT prints one alert with evidence breakdown.
 

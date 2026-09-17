@@ -25,6 +25,10 @@ from orbit.ingestion.frame_source import FrameSource
 logger = logging.getLogger("orbit.ingestion")
 
 REQUIRED_FIELDS = {"node", "rssi", "ch", "subtype", "seq", "a1", "a2", "a3", "len", "data"}
+# EAPOL frames use a synthetic envelope that omits raw bytes
+EAPOL_REQUIRED_FIELDS = {"node", "rssi", "ch", "subtype", "seq", "a1", "a2", "a3", "eapol"}
+# BLE advertisement frames (Stage 4)
+BLE_REQUIRED_FIELDS = {"node", "type", "address", "rssi"}
 
 
 @dataclass
@@ -99,7 +103,11 @@ class NodeReaderThread(threading.Thread):
             logger.debug("dropped malformed (non-JSON) line from node %s: %r", self.source.node_id, line[:120])
             return None
 
-        if not isinstance(envelope, dict) or not REQUIRED_FIELDS.issubset(envelope.keys()):
+        if not isinstance(envelope, dict) or not (
+            REQUIRED_FIELDS.issubset(envelope.keys())
+            or EAPOL_REQUIRED_FIELDS.issubset(envelope.keys())
+            or BLE_REQUIRED_FIELDS.issubset(envelope.keys())
+        ):
             with self.sink._lock:
                 self.sink.malformed_count += 1
             logger.debug("dropped frame missing required fields from node %s: %r", self.source.node_id, envelope)

@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import time
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Iterator, Optional
 
 
@@ -58,14 +60,19 @@ class ProcessFrameSource(FrameSource):
     same "one continuous line stream" shape as a serial port, so nothing
     downstream needs to know or care that there's no board attached."""
 
-    def __init__(self, node_id: str, cmd: list[str]):
+    def __init__(self, node_id: str, cmd: list[str], cwd: str | Path | None = None):
         self.node_id = node_id
         self.cmd = cmd
+        self.cwd = Path(cwd) if cwd is not None else None
         self._proc: Optional[subprocess.Popen] = None
 
     def lines(self) -> Iterator[str]:
         self._proc = subprocess.Popen(
-            self.cmd, stdout=subprocess.PIPE, text=True, bufsize=1
+            self.cmd,
+            stdout=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+            cwd=self.cwd,
         )
         assert self._proc.stdout is not None
         for line in self._proc.stdout:
@@ -95,3 +102,67 @@ class FileFrameSource(FrameSource):
                         yield line
             if not self.loop:
                 return
+
+
+class NetworkFrameSource(FrameSource):
+    """
+    Listens on a TCP socket for JSON-line frames forwarded from a remote node
+    (node_b_forwarder.py on Laptop B). One persistent connection accepted;
+    reconnects silently if dropped — never crashes the pipeline.
+
+    Used in hardware mode to receive Node B frames over the demo hotspot.
+    """
+
+    def __init__(self, node_id: str, host: str = "0.0.0.0", port: int = 9001):
+        self.node_id = node_id
+        self.host = host
+        self.port = port
+        self._stop = False
+        self._sock = None
+
+    def lines(self) -> Iterator[str]:
+        import socket as _socket
+        import logging
+
+        log = logging.getLogger(f"orbit.network.{self.node_id}")
+
+        while not self._stop:
+            srv = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+            srv.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+            srv.bind((self.host, self.port))
+            srv.listen(1)
+            srv.settimeout(3.0)
+            log.info("NetworkFrameSource listening on %s:%d for node %s", self.host, self.port, self.node_id)
+
+            try:
+                while not self._stop:
+                    try:
+                        conn, addr = srv.accept()
+                    except _socket.timeout:
+                        continue
+                    log.info("Node %s forwarder connected from %s", self.node_id, addr)
+                    conn.settimeout(5.0)
+                    buf = b""
+                    try:
+                        while not self._stop:
+                            try:
+                                chunk = conn.recv(4096)
+                            except _socket.timeout:
+                                continue
+                            if not chunk:
+                                log.warning("Node %s forwarder disconnected", self.node_id)
+                                break
+                            buf += chunk
+                            while b"\n" in buf:
+                                line, buf = buf.split(b"\n", 1)
+                                yield line.decode("utf-8", errors="replace").strip()
+                    finally:
+                        conn.close()
+            except Exception as e:
+                log.error("NetworkFrameSource error: %s — retrying in 3s", e)
+                time.sleep(3.0)
+            finally:
+                srv.close()
+
+    def close(self) -> None:
+        self._stop = True
