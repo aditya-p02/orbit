@@ -52,3 +52,6 @@ pio run -e node_b -t upload --upload-port <NODE_B_COM_PORT>
 
 Run `pio device list` first to find the actual COM ports — they're not
 fixed and will vary by machine/USB port.
+this orbit is for educational purposes.
+
+😊
