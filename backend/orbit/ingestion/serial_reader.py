@@ -70,6 +70,7 @@ class NodeReaderThread(threading.Thread):
         self.source = source
         self.sink = sink
         self._stop = threading.Event()
+        self.frames_read: int = 0  # incremented per successfully enqueued frame
 
     def run(self) -> None:
         logger.info("reader thread started for node %s", self.source.node_id)
@@ -88,6 +89,7 @@ class NodeReaderThread(threading.Thread):
                         source_node=self.source.node_id,
                     )
                 )
+                self.frames_read += 1
         except Exception:
             logger.exception("reader thread for node %s crashed", self.source.node_id)
 

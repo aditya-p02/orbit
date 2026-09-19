@@ -117,17 +117,17 @@ def parse_frame(envelope: dict, laptop_recv_ts: float) -> ParsedFrame:
         return pf
 
     pf = ParsedFrame(
-        node_id=envelope["node"],
-        rssi=envelope["rssi"],
-        channel_reported=envelope["ch"],
-        subtype=subtype,
-        subtype_name=SUBTYPE_NAMES.get(subtype, f"unknown-{subtype}"),
-        seq_num=envelope["seq"],
-        addr1=envelope["a1"].upper(),
-        addr2=envelope["a2"].upper(),
-        addr3=envelope["a3"].upper(),
-        laptop_recv_ts=laptop_recv_ts,
-    )
+            node_id=envelope["node"],
+            rssi=envelope["rssi"],
+            channel_reported=envelope.get("ch", envelope.get("channel", 0)),
+            subtype=subtype,
+            subtype_name=SUBTYPE_NAMES.get(subtype, f"unknown-{subtype}"),
+            seq_num=envelope["seq"],
+            addr1=envelope["a1"].upper(),
+            addr2=envelope["a2"].upper(),
+            addr3=envelope["a3"].upper(),
+            laptop_recv_ts=laptop_recv_ts,
+        )
 
     try:
         raw = base64.b64decode(envelope["data"])

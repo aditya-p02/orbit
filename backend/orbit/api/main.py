@@ -157,16 +157,22 @@ async def login(
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = make_token(username)
     response.set_cookie(
-        COOKIE_NAME, token,
-        httponly=True, samesite="lax", max_age=8 * 3600,
-    )
+            COOKIE_NAME, token,
+            httponly=True, samesite="lax", secure=False, path="/", max_age=8 * 3600,
+        )
     return {"ok": True, "username": username}
 
 
 @app.post("/logout")
 async def logout(response: Response):
-    response.delete_cookie(COOKIE_NAME)
+    response.delete_cookie(COOKIE_NAME, path="/", samesite="lax", secure=False)
     return {"ok": True}
+
+
+@app.get("/auth/me")
+async def auth_me(user: str = Depends(current_user)) -> dict:
+    """Lightweight endpoint to validate session and return username."""
+    return {"ok": True, "username": user}
 
 
 # ---------------------------------------------------------------------------

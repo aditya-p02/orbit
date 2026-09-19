@@ -202,6 +202,7 @@ def main() -> None:
     # We do this lazily via the on_alert callback; non-alert device updates
     # happen on a background flush thread every 2 seconds.
     def flush_devices():
+        _last_frame_counts: dict[str, int] = {}
         while True:
             time.sleep(2.0)
             try:
@@ -223,6 +224,13 @@ def main() -> None:
                     pipeline_state.set_queue_depth(queue.qsize())
                     for reader in readers:
                         nid = reader.source.node_id
+                        # record new frames since last flush cycle
+                        current = reader.frames_read
+                        prev = _last_frame_counts.get(nid, 0)
+                        new_frames = current - prev
+                        _last_frame_counts[nid] = current
+                        for _ in range(new_frames):
+                            pipeline_state.record_frame(nid)
                         # mark LIVE if the reader is alive
                         if reader.is_alive():
                             pipeline_state.node_status[nid]["status"] = "LIVE"
