@@ -48,26 +48,66 @@ const scoreDotColor = (score: number) => {
   return '#9CA3AF';
 };
 
-function getPunchyNarration(narration: string, ssid: string, evidence: any[]): string {
+interface ThreatExplanation {
+  attackName: string;
+  simpleExplanation: string;
+  attackerGoal: string;
+}
+
+function getDetailedThreatExplanation(narration: string, ssid: string, evidence: any[]): ThreatExplanation {
   const norm = (narration || '').toLowerCase();
   const rules = (evidence || []).map((e: any) => (e.rule || e.label || '').toLowerCase()).join(' ');
 
+  // 1. Evil Twin Attack
   if (norm.includes('evil twin') || rules.includes('ssid_collision') || (rules.includes('ssid') && rules.includes('downgrade'))) {
-    return `⚠️ Sus Alert: A rogue device is straight-up clone-broadcasting '${ssid}' with zero encryption on the wrong channel. Textbook Evil Twin trying to bait your devices into connecting.`;
+    return {
+      attackName: "Fake Wi-Fi Impersonation (Evil Twin Attack)",
+      simpleExplanation: `Someone nearby set up a fake Wi-Fi router with the exact same name as your network ('${ssid}'), but with zero password or encryption. If your phone or laptop connects to this fake signal instead of your real router, the attacker can spy on everything you browse and steal your credentials.`,
+      attackerGoal: "Trick your devices into connecting to a malicious lookalike hotspot to intercept private traffic.",
+    };
   }
+
+  // 2. Handshake Sniffing / Deauth
   if (norm.includes('handshake') || rules.includes('handshake') || rules.includes('deauth') || rules.includes('eapol')) {
-    return `🚨 Attack in progress: An attacker just kicked a device off your Wi-Fi and snatched the 4-way handshake out of thin air. They're trying to crack your network password offline right now.`;
+    return {
+      attackName: "Wi-Fi Password Theft Attempt (Deauthentication & Handshake Sniffing)",
+      simpleExplanation: `An attacker deliberately kicked your device off your Wi-Fi network and intercepted the secret security handshake as your device automatically reconnected. They now have the encrypted key file and are attempting to guess or crack your Wi-Fi password offline.`,
+      attackerGoal: "Crack your Wi-Fi password without having direct physical access to your router.",
+    };
   }
+
+  // 3. Karma / PineApple Probe Trap
   if (norm.includes('karma') || rules.includes('karma') || rules.includes('probe')) {
-    return `🎣 Major Catfish Behavior: This AP is answering every Wi-Fi probe request pretending to be whatever network your device asks for. Pure Karma trap.`;
+    return {
+      attackName: "Automatic Network Trap (Karma / Fake Access Point Attack)",
+      simpleExplanation: `This device is silently listening for whatever Wi-Fi networks your phone is searching for (like your home Wi-Fi, airport Wi-Fi, or cafe Wi-Fi) and instantly pretending to be that network. It lures your devices into connecting automatically without asking you.`,
+      attackerGoal: "Silently trap passing smartphones and laptops into connecting so the attacker can inspect all data.",
+    };
   }
+
+  // 4. BLE / Multi-Radio Stalker
   if (norm.includes('ble') || rules.includes('ble')) {
-    return `👀 Multi-Radio Stalker: A rogue Wi-Fi AP and BLE device are moving in lockstep right outside. Same physical attacker approaching your airspace.`;
+    return {
+      attackName: "Physical Approach Stalker (Bluetooth + Wi-Fi Radio Tracking)",
+      simpleExplanation: `A Bluetooth beacon and an unauthorized Wi-Fi transmitter are moving closer to your perimeter in identical synchronization. This indicates a single physical attacker carrying both radios approaching your building.`,
+      attackerGoal: "Physical positioning and multi-channel surveillance on your premises.",
+    };
   }
+
+  // 5. General fallback
   if (narration && narration.trim().length > 0 && !narration.includes('No additional analysis')) {
-    return narration;
+    return {
+      attackName: "Suspicious Radio Signal Anomaly",
+      simpleExplanation: narration,
+      attackerGoal: "Unauthorized RF transmission exceeding security thresholds.",
+    };
   }
-  return `⚠️ Suspicious RF Activity: Device exhibited anomalous broadcast behavior exceeding security thresholds on '${ssid}'.`;
+
+  return {
+    attackName: "Anomalous Wireless Broadcast Activity",
+    simpleExplanation: `This device is emitting unusual Wi-Fi management signals that do not match standard network baselines on '${ssid}'.`,
+    attackerGoal: "Potential unauthorized network reconnaissance or spoofing attempt.",
+  };
 }
 
 function DeviceDrawer({ device, onClose }: { device: Device; onClose: () => void }) {
@@ -194,22 +234,38 @@ function DeviceDrawer({ device, onClose }: { device: Device; onClose: () => void
           )}
 
           {/* Prominent AI Threat Breakdown */}
-          <div className="relative overflow-hidden bg-gradient-to-r from-primary/15 via-primary/8 to-background border-2 border-primary/30 rounded-2xl p-4 space-y-2 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="flex items-center justify-center w-5 h-5 rounded-lg bg-primary text-primary-foreground text-xs shadow-sm">
-                  ✨
-                </span>
-                <span className="text-xs font-bold text-primary uppercase tracking-wider">AI Threat Breakdown · Plain English</span>
+          {(() => {
+            const threat = getDetailedThreatExplanation(device.aiNarration, device.ssid, device.evidence);
+            return (
+              <div className="relative overflow-hidden bg-gradient-to-r from-primary/15 via-primary/8 to-background border-2 border-primary/30 rounded-2xl p-4 shadow-sm space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="flex items-center justify-center w-5 h-5 rounded-lg bg-primary text-primary-foreground text-xs shadow-sm">
+                      ✨
+                    </span>
+                    <span className="text-xs font-bold text-primary uppercase tracking-wider">
+                      AI Threat Explanation · In Simple Terms
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30">
+                    EXPLAINABLE AI
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 pt-0.5">
+                  <div className="inline-flex items-center gap-1.5 text-xs font-bold text-foreground bg-primary/20 px-2.5 py-1 rounded-lg border border-primary/30">
+                    <span>⚠️ Potential Attack:</span>
+                    <span className="text-primary font-bold">{threat.attackName}</span>
+                  </div>
+                  
+                  <div className="text-sm text-foreground/90 leading-relaxed space-y-1">
+                    <p><strong>What is happening:</strong> {threat.simpleExplanation}</p>
+                    <p className="text-xs text-muted-foreground"><strong>Attacker Objective:</strong> {threat.attackerGoal}</p>
+                  </div>
+                </div>
               </div>
-              <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30">
-                LOCAL LLM
-              </span>
-            </div>
-            <p className="text-sm font-semibold text-foreground leading-relaxed">
-              {getPunchyNarration(device.aiNarration, device.ssid, device.evidence)}
-            </p>
-          </div>
+            );
+          })()}
 
           <div className="flex gap-3 pt-2">
             <button

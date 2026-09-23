@@ -141,19 +141,19 @@ class AlertNarrator:
 FALLBACK_NARRATIONS: dict[str, str] = {
     # evil twin (ssid+security+channel)
     "ssid_collision+security_downgrade+channel_mismatch": (
-        "⚠️ Sus alert: A rogue device is straight-up impersonating your trusted network with zero encryption on the wrong channel. Textbook Evil Twin trying to bait your devices."
+        "Fake Wi-Fi Impersonation (Evil Twin Attack): An unauthorized hotspot is broadcasting your exact network name with zero encryption on the wrong channel to bait nearby devices into connecting so the attacker can steal credentials."
     ),
     # karma
     "karma_multi_ssid+karma_untrusted_ssid": (
-        "🎣 Major catfish behavior: This AP is answering every single probe request pretending to be whatever network your device asks for. Pure Karma trap."
+        "Automatic Network Trap (Karma Attack): This device is answering all Wi-Fi probe requests pretending to be whatever network your phone searches for to trick it into connecting automatically."
     ),
     # handshake capture
     "handshake_deauth_burst+handshake_eapol_capture": (
-        "🚨 Attacker just kicked a device off your Wi-Fi and snatched the 4-way handshake out of thin air. They're trying to crack your network password offline right now."
+        "Wi-Fi Password Theft Attempt (Deauth + Handshake Sniffing): An attacker kicked a device off your Wi-Fi and captured the reconnection handshake to crack your Wi-Fi password offline."
     ),
     # BLE correlation
     "ble_wifi_correlation": (
-        "👀 Multi-radio stalker: A BLE beacon and rogue Wi-Fi signal are moving in lockstep outside. Same physical attacker approaching your airspace."
+        "Physical Approach Stalker (Bluetooth + Wi-Fi Correlation): A Bluetooth beacon and rogue Wi-Fi transmitter are moving toward your perimeter in identical sync, indicating a physical attacker nearby."
     ),
 }
 

@@ -470,10 +470,33 @@ export default function Overview() {
             </div>
           </div>
 
-          <div className="bg-status-flagged-bg border border-status-flagged/20 rounded-xl p-3 text-xs text-foreground leading-relaxed">
-            <span className="font-semibold text-status-flagged">AI Analysis  </span>
-            {topDevice.aiNarration}
-          </div>
+          {(() => {
+            const norm = (topDevice.aiNarration || topDevice.narration || '').toLowerCase();
+            const rules = (topDevice.evidence || []).map((e: any) => (e.rule || e.label || '').toLowerCase()).join(' ');
+            let attackName = "Fake Wi-Fi Impersonation (Evil Twin Attack)";
+            let simpleSummary = `Someone nearby set up a fake Wi-Fi router with the exact same name ('${topDevice.ssid}') but with no password. If devices connect, attackers can intercept private browsing.`;
+
+            if (norm.includes('karma') || rules.includes('karma') || rules.includes('probe')) {
+              attackName = "Automatic Network Trap (Karma Attack)";
+              simpleSummary = `This malicious device automatically pretends to be whatever network your phone searches for to trick it into connecting.`;
+            } else if (norm.includes('handshake') || rules.includes('handshake') || rules.includes('deauth')) {
+              attackName = "Password Theft Attempt (Deauth & Handshake Sniffing)";
+              simpleSummary = `An attacker disconnected a device from your Wi-Fi and captured the reconnection handshake to crack your password offline.`;
+            } else if (norm.includes('ble') || rules.includes('ble')) {
+              attackName = "Physical Stalker (Bluetooth + Wi-Fi Tracking)";
+              simpleSummary = `A Bluetooth beacon and rogue Wi-Fi signal are moving in lockstep, indicating an attacker physically approaching.`;
+            }
+
+            return (
+              <div className="bg-status-flagged-bg border border-status-flagged/30 rounded-xl p-3 text-xs text-foreground leading-relaxed space-y-1.5">
+                <div className="flex items-center gap-1.5 font-bold text-status-flagged">
+                  <span>✨ AI Analysis:</span>
+                  <span className="bg-status-flagged/10 px-2 py-0.5 rounded border border-status-flagged/20">{attackName}</span>
+                </div>
+                <p className="text-muted-foreground">{simpleSummary}</p>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
