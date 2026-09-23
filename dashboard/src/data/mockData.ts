@@ -72,9 +72,9 @@ export interface ProximityDevice {
 
 export const devices: Device[] = [
   {
-    id: 'd1',
+    id: 'AABBCC001199',
     state: 'FLAGGED',
-    ssid: 'HomeNet-5G',
+    ssid: 'HomeNet-5G [Rogue Clone]',
     bssid: 'AABBCC001199',
     vendor: 'Espressif Systems',
     score: 140,
@@ -90,10 +90,10 @@ export const devices: Device[] = [
       { label: 'Handshake Deauth Burst', score: 25 },
       { label: 'EAPOL Capture Attempt', score: 30 },
     ],
-    aiNarration: '⚠️ Sus alert: A rogue device is straight-up clone-broadcasting HomeNet-5G with zero encryption on the wrong channel. Textbook Evil Twin trying to bait your devices into connecting.',
+    aiNarration: 'Rogue Access Point Impersonation (Evil Twin Attack): An unauthorized transmitter is broadcasting HomeNet-5G matching the whitelist with zero encryption.',
   },
   {
-    id: 'd2',
+    id: 'EEFF00112233',
     state: 'SUSPICIOUS',
     ssid: 'KarmaNet',
     bssid: 'EEFF00112233',
@@ -107,10 +107,10 @@ export const devices: Device[] = [
       { label: 'Multi-SSID Probe Responder', score: 30 },
       { label: 'Untrusted Network Responses', score: 25 },
     ],
-    aiNarration: '🎣 Major Catfish Behavior: This AP is answering every Wi-Fi probe request pretending to be whatever network your device asks for. Pure Karma trap.',
+    aiNarration: 'Automated Probe Response Trap (Karma Attack): This rogue AP responds to all probe requests pretending to be whatever SSID nearby devices search for.',
   },
   {
-    id: 'd3',
+    id: 'DEADBEEF0001',
     state: 'UNKNOWN',
     ssid: 'Free_Cafe_WiFi',
     bssid: 'DEADBEEF0001',
@@ -124,7 +124,7 @@ export const devices: Device[] = [
     aiNarration: 'Public open AP operating nominally. No rogue indicators detected.',
   },
   {
-    id: 'd4',
+    id: 'CCDDEE003344',
     state: 'UNKNOWN',
     ssid: 'NETGEAR-Office',
     bssid: 'CCDDEE003344',
@@ -138,7 +138,7 @@ export const devices: Device[] = [
     aiNarration: 'Legitimate enterprise mesh AP matching baseline encryption signature.',
   },
   {
-    id: 'd5',
+    id: '50C7BF112233',
     state: 'UNKNOWN',
     ssid: 'AndroidAP',
     bssid: '50C7BF112233',
@@ -152,11 +152,11 @@ export const devices: Device[] = [
     aiNarration: 'Standard client mobile hotspot. No unauthorized management frames observed.',
   },
   {
-    id: 'd6',
+    id: 'AABBCC001122',
     state: 'UNKNOWN',
-    ssid: 'HomeNet-5G (Trusted)',
+    ssid: 'HomeNet-5G [Base AP]',
     bssid: 'AABBCC001122',
-    vendor: 'Cisco Systems',
+    vendor: 'Espressif Systems',
     score: 0,
     lastSeen: '1s ago',
     lastSeenMs: 1000,
@@ -166,11 +166,11 @@ export const devices: Device[] = [
     aiNarration: 'Authorized baseline access point. Encryption and parameters verified.',
   },
   {
-    id: 'd7',
+    id: '123456789ABC',
     state: 'UNKNOWN',
     ssid: 'Client Station',
     bssid: '123456789ABC',
-    vendor: 'Apple Inc.',
+    vendor: 'Samsung / Apple',
     score: 0,
     lastSeen: '5s ago',
     lastSeenMs: 5000,
@@ -180,7 +180,7 @@ export const devices: Device[] = [
     aiNarration: 'Authenticated wireless client station active in local BSS.',
   },
   {
-    id: 'd8',
+    id: 'EE1122334455',
     state: 'WATCHING',
     ssid: 'BLE Tracking Beacon',
     bssid: 'EE1122334455',
@@ -264,7 +264,7 @@ export const nodes: NodeData[] = [
 export const timelineEvents: TimelineEvent[] = [
   {
     id: 't1',
-    deviceId: 'd1',
+    deviceId: 'AABBCC001199',
     ssid: 'HomeNet-5G [Rogue Clone]',
     bssid: 'AABBCC001199',
     timestamp: '00:24:50',
@@ -275,7 +275,7 @@ export const timelineEvents: TimelineEvent[] = [
   },
   {
     id: 't2',
-    deviceId: 'd1',
+    deviceId: 'AABBCC001199',
     ssid: 'HomeNet-5G [Rogue Clone]',
     bssid: 'AABBCC001199',
     timestamp: '00:24:51',
@@ -286,7 +286,7 @@ export const timelineEvents: TimelineEvent[] = [
   },
   {
     id: 't3',
-    deviceId: 'd1',
+    deviceId: 'AABBCC001199',
     ssid: 'HomeNet-5G [Rogue Clone]',
     bssid: 'AABBCC001199',
     timestamp: '00:24:52',
@@ -297,7 +297,7 @@ export const timelineEvents: TimelineEvent[] = [
   },
   {
     id: 't4',
-    deviceId: 'd1',
+    deviceId: 'AABBCC001199',
     ssid: 'HomeNet-5G [Rogue Clone]',
     bssid: 'AABBCC001199',
     timestamp: '00:24:55',
@@ -308,7 +308,7 @@ export const timelineEvents: TimelineEvent[] = [
   },
   {
     id: 't5',
-    deviceId: 'd1',
+    deviceId: 'AABBCC001199',
     ssid: 'HomeNet-5G [Rogue Clone]',
     bssid: 'AABBCC001199',
     timestamp: '00:24:56',
@@ -319,7 +319,7 @@ export const timelineEvents: TimelineEvent[] = [
   },
   {
     id: 't6',
-    deviceId: 'd2',
+    deviceId: 'EEFF00112233',
     ssid: 'KarmaNet',
     bssid: 'EEFF00112233',
     timestamp: '00:24:45',
@@ -330,7 +330,7 @@ export const timelineEvents: TimelineEvent[] = [
   },
   {
     id: 't7',
-    deviceId: 'd2',
+    deviceId: 'EEFF00112233',
     ssid: 'KarmaNet',
     bssid: 'EEFF00112233',
     timestamp: '00:24:46',
@@ -341,7 +341,7 @@ export const timelineEvents: TimelineEvent[] = [
   },
   {
     id: 't8',
-    deviceId: 'd8',
+    deviceId: 'EE1122334455',
     ssid: 'BLE Tracking Beacon',
     bssid: 'EE1122334455',
     timestamp: '00:24:58',
@@ -352,7 +352,7 @@ export const timelineEvents: TimelineEvent[] = [
   },
   {
     id: 't9',
-    deviceId: 'd6',
+    deviceId: 'AABBCC001122',
     ssid: 'HomeNet-5G [Base AP]',
     bssid: 'AABBCC001122',
     timestamp: '00:24:00',
@@ -363,7 +363,7 @@ export const timelineEvents: TimelineEvent[] = [
   },
   {
     id: 't10',
-    deviceId: 'd7',
+    deviceId: '123456789ABC',
     ssid: 'Client Station',
     bssid: '123456789ABC',
     timestamp: '00:24:02',

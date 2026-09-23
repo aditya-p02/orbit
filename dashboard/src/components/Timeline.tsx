@@ -9,6 +9,17 @@ const severityConfig: Record<string, { color: string; bg: string; border: string
   UNKNOWN: { color: 'text-muted-foreground', bg: 'bg-muted', border: 'border-border', dot: '#94A3B8', label: 'Baseline & Station' },
 };
 
+const CANONICAL_DEVICES: Record<string, { ssid: string }> = {
+  'AABBCC001199': { ssid: 'HomeNet-5G [Rogue Clone]' },
+  'EEFF00112233': { ssid: 'KarmaNet' },
+  'AABBCC001122': { ssid: 'HomeNet-5G [Base AP]' },
+  'DEADBEEF0001': { ssid: 'Free_Cafe_WiFi' },
+  'CCDDEE003344': { ssid: 'NETGEAR-Office' },
+  '50C7BF112233': { ssid: 'AndroidAP' },
+  '123456789ABC': { ssid: 'Client Station' },
+  'EE1122334455': { ssid: 'BLE Tracking Beacon' },
+};
+
 function formatEvent(raw: any, index: number): TimelineEvent {
   const normMac = String(raw.device_mac || raw.bssid || raw.deviceId || `DEV-${index}`).toUpperCase().replace(/[:-]/g, '');
   const formattedMac = normMac.length === 12 ? normMac.match(/.{1,2}/g)?.join(':') || normMac : normMac;
@@ -23,16 +34,8 @@ function formatEvent(raw: any, index: number): TimelineEvent {
     sev = 'WATCHING';
   }
 
-  let ssid = raw.ssid;
-  if (!ssid) {
-    if (normMac.startsWith('AABBCC001199')) ssid = 'HomeNet-5G [Rogue Clone]';
-    else if (normMac.startsWith('AABBCC001122')) ssid = 'HomeNet-5G [Base AP]';
-    else if (normMac.startsWith('EEFF00112233')) ssid = 'KarmaNet';
-    else if (normMac.startsWith('EE1122334455')) ssid = 'BLE Tracking Beacon';
-    else if (normMac.startsWith('123456789ABC')) ssid = 'Client Station';
-    else if (normMac.startsWith('50C7BF112233')) ssid = 'AndroidAP';
-    else ssid = 'Airspace Entity';
-  }
+  const canonical = CANONICAL_DEVICES[normMac];
+  let ssid = raw.ssid || canonical?.ssid || (normMac.startsWith('EE11') ? 'BLE Tracking Beacon' : 'Airspace Entity');
 
   const timeStr = raw.timestamp
     ? (typeof raw.timestamp === 'number' ? new Date(raw.timestamp * 1000).toLocaleTimeString() : String(raw.timestamp))
