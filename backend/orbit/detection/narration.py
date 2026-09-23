@@ -141,19 +141,19 @@ class AlertNarrator:
 FALLBACK_NARRATIONS: dict[str, str] = {
     # evil twin (ssid+security+channel)
     "ssid_collision+security_downgrade+channel_mismatch": (
-        "Fake Wi-Fi Impersonation (Evil Twin Attack): An unauthorized hotspot is broadcasting your exact network name with zero encryption on the wrong channel to bait nearby devices into connecting so the attacker can steal credentials."
+        "Rogue Access Point Impersonation (Evil Twin Attack): An unauthorized transmitter is broadcasting an SSID that matches a trusted network in the whitelist, but with security downgraded to open (no encryption) on the wrong channel to intercept client traffic."
     ),
     # karma
     "karma_multi_ssid+karma_untrusted_ssid": (
-        "Automatic Network Trap (Karma Attack): This device is answering all Wi-Fi probe requests pretending to be whatever network your phone searches for to trick it into connecting automatically."
+        "Automated Probe Response Trap (Karma Attack): This rogue access point is answering probe requests for multiple distinct network names, pretending to be whatever SSID nearby devices search for to force automatic reconnection."
     ),
     # handshake capture
     "handshake_deauth_burst+handshake_eapol_capture": (
-        "Wi-Fi Password Theft Attempt (Deauth + Handshake Sniffing): An attacker kicked a device off your Wi-Fi and captured the reconnection handshake to crack your Wi-Fi password offline."
+        "WPA Handshake Interception Attempt (Deauthentication Attack): An attacker sent deauthentication frames to disconnect a client station and captured the 4-way WPA handshake upon reconnection to attempt offline password cracking."
     ),
     # BLE correlation
     "ble_wifi_correlation": (
-        "Physical Approach Stalker (Bluetooth + Wi-Fi Correlation): A Bluetooth beacon and rogue Wi-Fi transmitter are moving toward your perimeter in identical sync, indicating a physical attacker nearby."
+        "Multi-Protocol Proximity Correlation (Wi-Fi + BLE Tracking): A Bluetooth Low Energy (BLE) peripheral and an unauthorized Wi-Fi transmitter show synchronized signal strength increases, indicating a physical attacker approaching the perimeter."
     ),
 }
 

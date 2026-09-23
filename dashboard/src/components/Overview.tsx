@@ -473,18 +473,18 @@ export default function Overview() {
           {(() => {
             const norm = (topDevice.aiNarration || topDevice.narration || '').toLowerCase();
             const rules = (topDevice.evidence || []).map((e: any) => (e.rule || e.label || '').toLowerCase()).join(' ');
-            let attackName = "Fake Wi-Fi Impersonation (Evil Twin Attack)";
-            let simpleSummary = `Someone nearby set up a fake Wi-Fi router with the exact same name ('${topDevice.ssid}') but with no password. If devices connect, attackers can intercept private browsing.`;
+            let attackName = "Rogue Access Point Impersonation (Evil Twin Attack)";
+            let simpleSummary = `An unauthorized transmitter is broadcasting '${topDevice.ssid}', which matches a network in the system's trusted whitelist, but with security disabled.`;
 
             if (norm.includes('karma') || rules.includes('karma') || rules.includes('probe')) {
-              attackName = "Automatic Network Trap (Karma Attack)";
-              simpleSummary = `This malicious device automatically pretends to be whatever network your phone searches for to trick it into connecting.`;
+              attackName = "Automated Probe Response Trap (Karma Attack)";
+              simpleSummary = `This rogue access point is answering probe requests for multiple SSIDs, masquerading as whatever network nearby devices search for.`;
             } else if (norm.includes('handshake') || rules.includes('handshake') || rules.includes('deauth')) {
-              attackName = "Password Theft Attempt (Deauth & Handshake Sniffing)";
-              simpleSummary = `An attacker disconnected a device from your Wi-Fi and captured the reconnection handshake to crack your password offline.`;
+              attackName = "WPA Handshake Interception Attempt (Deauthentication Attack)";
+              simpleSummary = `An attacker sent deauthentication frames to disconnect a client and captured the WPA handshake to crack passwords offline.`;
             } else if (norm.includes('ble') || rules.includes('ble')) {
-              attackName = "Physical Stalker (Bluetooth + Wi-Fi Tracking)";
-              simpleSummary = `A Bluetooth beacon and rogue Wi-Fi signal are moving in lockstep, indicating an attacker physically approaching.`;
+              attackName = "Multi-Protocol Proximity Correlation (Wi-Fi + BLE Tracking)";
+              simpleSummary = `A Bluetooth beacon and rogue Wi-Fi signal are moving in lockstep, indicating a physical attacker approaching the monitored zone.`;
             }
 
             return (

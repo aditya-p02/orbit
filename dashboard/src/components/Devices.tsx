@@ -61,36 +61,36 @@ function getDetailedThreatExplanation(narration: string, ssid: string, evidence:
   // 1. Evil Twin Attack
   if (norm.includes('evil twin') || rules.includes('ssid_collision') || (rules.includes('ssid') && rules.includes('downgrade'))) {
     return {
-      attackName: "Fake Wi-Fi Impersonation (Evil Twin Attack)",
-      simpleExplanation: `Someone nearby set up a fake Wi-Fi router with the exact same name as your network ('${ssid}'), but with zero password or encryption. If your phone or laptop connects to this fake signal instead of your real router, the attacker can spy on everything you browse and steal your credentials.`,
-      attackerGoal: "Trick your devices into connecting to a malicious lookalike hotspot to intercept private traffic.",
+      attackName: "Rogue Access Point Impersonation (Evil Twin Attack)",
+      simpleExplanation: `An unauthorized transmitter is broadcasting '${ssid}', which matches a network configured in the system's trusted whitelist, but with security disabled (open/unencrypted). If client devices connect to this rogue signal instead of the verified access point, all browsing traffic and credentials can be intercepted.`,
+      attackerGoal: "Bait client stations into connecting to an unencrypted lookalike access point to intercept network traffic.",
     };
   }
 
   // 2. Handshake Sniffing / Deauth
   if (norm.includes('handshake') || rules.includes('handshake') || rules.includes('deauth') || rules.includes('eapol')) {
     return {
-      attackName: "Wi-Fi Password Theft Attempt (Deauthentication & Handshake Sniffing)",
-      simpleExplanation: `An attacker deliberately kicked your device off your Wi-Fi network and intercepted the secret security handshake as your device automatically reconnected. They now have the encrypted key file and are attempting to guess or crack your Wi-Fi password offline.`,
-      attackerGoal: "Crack your Wi-Fi password without having direct physical access to your router.",
+      attackName: "WPA Handshake Interception Attempt (Deauthentication Attack)",
+      simpleExplanation: `An attacker transmitted spoofed deauthentication frames to disconnect a client station from '${ssid}'. When the client automatically reconnected, the attacker captured the 4-way WPA security handshake to attempt offline password cracking.`,
+      attackerGoal: "Obtain encrypted WPA handshake tokens to attempt offline password cracking without access to the router.",
     };
   }
 
   // 3. Karma / PineApple Probe Trap
   if (norm.includes('karma') || rules.includes('karma') || rules.includes('probe')) {
     return {
-      attackName: "Automatic Network Trap (Karma / Fake Access Point Attack)",
-      simpleExplanation: `This device is silently listening for whatever Wi-Fi networks your phone is searching for (like your home Wi-Fi, airport Wi-Fi, or cafe Wi-Fi) and instantly pretending to be that network. It lures your devices into connecting automatically without asking you.`,
-      attackerGoal: "Silently trap passing smartphones and laptops into connecting so the attacker can inspect all data.",
+      attackName: "Automated Probe Response Trap (Karma Attack)",
+      simpleExplanation: `This rogue access point is answering client probe requests for multiple different network names, masquerading as whatever SSID a nearby device is searching for. It tricks devices with auto-reconnect enabled into joining the rogue gateway.`,
+      attackerGoal: "Trick roaming client devices into automatically joining an attacker-controlled network.",
     };
   }
 
   // 4. BLE / Multi-Radio Stalker
   if (norm.includes('ble') || rules.includes('ble')) {
     return {
-      attackName: "Physical Approach Stalker (Bluetooth + Wi-Fi Radio Tracking)",
-      simpleExplanation: `A Bluetooth beacon and an unauthorized Wi-Fi transmitter are moving closer to your perimeter in identical synchronization. This indicates a single physical attacker carrying both radios approaching your building.`,
-      attackerGoal: "Physical positioning and multi-channel surveillance on your premises.",
+      attackName: "Multi-Protocol Proximity Correlation (Wi-Fi + BLE Tracking)",
+      simpleExplanation: `A Bluetooth Low Energy (BLE) peripheral and an unauthorized Wi-Fi transmitter show synchronized signal strength increases, indicating a single physical attacker carrying both radios approaching the monitored zone.`,
+      attackerGoal: "Physical perimeter surveillance and coordinated multi-radio intrusion.",
     };
   }
 
