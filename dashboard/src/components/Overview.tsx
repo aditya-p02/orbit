@@ -12,26 +12,70 @@ interface MetricCardProps {
 }
 
 function MetricCard({ label, value, sub, color = 'text-foreground', icon, delay = 0 }: MetricCardProps) {
-  const [displayed, setDisplayed] = useState(0);
-  const numVal = typeof value === 'number' ? value : NaN;
+  const [displayed, setDisplayed] = useState<number | string>(value);
+  const prevValRef = useRef<number | null>(null);
+  const isFirstMount = useRef(true);
+
+  const numVal = typeof value === 'number' ? value : parseFloat(String(value));
+  const isNumeric = !isNaN(numVal) && isFinite(numVal);
+  const hasDecimals = isNumeric && !Number.isInteger(numVal);
 
   useEffect(() => {
-    if (isNaN(numVal)) return;
-    const timer = setTimeout(() => {
-      let start = 0;
+    if (!isNumeric) {
+      setDisplayed(value);
+      return;
+    }
+
+    // On initial mount: animate once from 0 to value
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      const start = 0;
       const end = numVal;
-      const duration = 800;
+      const duration = 600;
       const startTime = performance.now();
-      const tick = (now: number) => {
-        const progress = Math.min((now - startTime) / duration, 1);
-        const eased = 1 - Math.pow(1 - progress, 3);
-        setDisplayed(Math.round(start + (end - start) * eased));
-        if (progress < 1) requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
-    }, delay);
-    return () => clearTimeout(timer);
-  }, [numVal, delay]);
+      const timer = setTimeout(() => {
+        const tick = (now: number) => {
+          const progress = Math.min((now - startTime) / duration, 1);
+          const eased = 1 - Math.pow(1 - progress, 3);
+          const current = start + (end - start) * eased;
+          setDisplayed(hasDecimals ? parseFloat(current.toFixed(1)) : Math.round(current));
+          if (progress < 1) requestAnimationFrame(tick);
+          else prevValRef.current = end;
+        };
+        requestAnimationFrame(tick);
+      }, delay);
+      return () => clearTimeout(timer);
+    }
+
+    // On subsequent live updates: smoothly update from previous value without resetting to 0
+    const start = prevValRef.current !== null ? prevValRef.current : numVal;
+    const end = numVal;
+    prevValRef.current = end;
+
+    if (Math.abs(start - end) < 0.05) {
+      setDisplayed(hasDecimals ? parseFloat(end.toFixed(1)) : Math.round(end));
+      return;
+    }
+
+    const duration = 300;
+    const startTime = performance.now();
+    let animId: number;
+
+    const tick = (now: number) => {
+      const progress = Math.min((now - startTime) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const current = start + (end - start) * eased;
+      setDisplayed(hasDecimals ? parseFloat(current.toFixed(1)) : Math.round(current));
+      if (progress < 1) animId = requestAnimationFrame(tick);
+    };
+    animId = requestAnimationFrame(tick);
+
+    return () => cancelAnimationFrame(animId);
+  }, [numVal, hasDecimals, isNumeric, value, delay]);
+
+  const formattedDisplay = typeof displayed === 'number'
+    ? (hasDecimals ? displayed.toFixed(1) : displayed.toLocaleString())
+    : displayed;
 
   return (
     <div
@@ -45,7 +89,7 @@ function MetricCard({ label, value, sub, color = 'text-foreground', icon, delay 
         </div>
       </div>
       <div className={`text-3xl font-bold tabular-nums tracking-tight ${color}`}>
-        {isNaN(numVal) ? value : displayed.toLocaleString()}
+        {formattedDisplay}
       </div>
       {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
     </div>
