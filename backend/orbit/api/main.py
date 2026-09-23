@@ -210,6 +210,21 @@ async def resolve_alert(
     return {"ok": True}
 
 
+@app.post("/alerts/{alert_id}/unresolve")
+async def unresolve_alert(
+    alert_id: int,
+    _user: str = Depends(current_user),
+) -> dict:
+    conn = get_conn()
+    ok = q.unresolve_alert(conn, alert_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    # push update over WebSocket
+    alert = q.get_alert(conn, alert_id)
+    await ws_manager.broadcast({"type": "alert_unresolved", "alert": alert})
+    return {"ok": True}
+
+
 # ---------------------------------------------------------------------------
 # Whitelist
 # ---------------------------------------------------------------------------

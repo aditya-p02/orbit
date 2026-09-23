@@ -41,6 +41,7 @@ export const api = {
   // Alerts
   getAlerts: () => fetchWithAuth('/alerts'),
   resolveAlert: (id: string) => fetchWithAuth(`/alerts/${id}/resolve`, { method: 'POST' }),
+  unresolveAlert: (id: string) => fetchWithAuth(`/alerts/${id}/unresolve`, { method: 'POST' }),
   whitelistAlert: (ssid: string, bssid: string) => 
     fetchWithAuth('/whitelist', { method: 'POST', body: JSON.stringify({ ssid, bssid }) }),
   getWhitelist: () => fetchWithAuth('/whitelist'),
@@ -57,6 +58,7 @@ export const api = {
 
 export interface Device {
   id: string;
+  mac?: string;
   bssid: string;
   ssid: string;
   vendor: string;
@@ -65,7 +67,9 @@ export interface Device {
   lastSeen: string;
   channel: number;
   rssi: number;
-  evidence: Array<{ rule: string; points: number; detail?: string }>;
+  device_type?: string;
+  deviceType?: string;
+  evidence: Array<{ rule?: string; label?: string; points?: number; score?: number; detail?: string }>;
   aiNarration: string;
 }
 

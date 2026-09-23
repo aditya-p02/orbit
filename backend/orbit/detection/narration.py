@@ -141,23 +141,19 @@ class AlertNarrator:
 FALLBACK_NARRATIONS: dict[str, str] = {
     # evil twin (ssid+security+channel)
     "ssid_collision+security_downgrade+channel_mismatch": (
-        "A rogue access point is impersonating your trusted network with "
-        "no encryption on the wrong channel — classic Evil Twin attack."
+        "⚠️ Sus alert: A rogue device is straight-up impersonating your trusted network with zero encryption on the wrong channel. Textbook Evil Twin trying to bait your devices."
     ),
     # karma
     "karma_multi_ssid+karma_untrusted_ssid": (
-        "An access point is responding to any Wi-Fi probe request regardless "
-        "of SSID — a Karma attack designed to intercept client connections."
+        "🎣 Major catfish behavior: This AP is answering every single probe request pretending to be whatever network your device asks for. Pure Karma trap."
     ),
     # handshake capture
     "handshake_deauth_burst+handshake_eapol_capture": (
-        "A WPA handshake was forcibly captured by deauthenticating a client — "
-        "the attacker may attempt offline password cracking."
+        "🚨 Attacker just kicked a device off your Wi-Fi and snatched the 4-way handshake out of thin air. They're trying to crack your network password offline right now."
     ),
     # BLE correlation
     "ble_wifi_correlation": (
-        "A BLE device and a rogue Wi-Fi AP show synchronized RSSI increases — "
-        "likely carried by the same attacker moving toward your network."
+        "👀 Multi-radio stalker: A BLE beacon and rogue Wi-Fi signal are moving in lockstep outside. Same physical attacker approaching your airspace."
     ),
 }
 

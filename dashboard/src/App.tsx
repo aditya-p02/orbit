@@ -183,7 +183,10 @@ export default function App() {
 
   const navigate = useCallback((tab: Tab) => {
     setActiveTab(tab);
-    if (tab === 'alerts') setAlertBadge(0);
+    if (tab === 'alerts') {
+      setAlertBadge(0);
+      setSelectedDevice(null);
+    }
   }, []);
 
   // Loading state
@@ -313,7 +316,7 @@ export default function App() {
             <Devices selectedDevice={selectedDevice} onSelectDevice={setSelectedDevice} />
           )}
           {activeTab === 'alerts' && (
-            <Alerts selectedDevice={selectedDevice} />
+            <Alerts selectedDevice={selectedDevice} onClearDeviceFilter={() => setSelectedDevice(null)} />
           )}
           {activeTab === 'nodes' && <Nodes />}
           {activeTab === 'proximity' && (

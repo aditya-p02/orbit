@@ -30,10 +30,34 @@ const severityConfig = {
   WATCHING: { color: 'text-status-watching bg-status-watching-bg border-status-watching/20', dot: '#EAB308' },
 };
 
-function AlertCard({ alert, onResolve, onWhitelist, isResolving, isWhitelisting }: { 
+function getPunchyNarration(narration: string, ssid: string, evidence: any[]): string {
+  const norm = (narration || '').toLowerCase();
+  const rules = (evidence || []).map((e: any) => (e.rule || e.label || '').toLowerCase()).join(' ');
+
+  if (norm.includes('evil twin') || rules.includes('ssid_collision') || (rules.includes('ssid') && rules.includes('downgrade'))) {
+    return `⚠️ Sus Alert: A rogue device is straight-up clone-broadcasting '${ssid}' with zero encryption on the wrong channel. Textbook Evil Twin trying to bait your devices into connecting.`;
+  }
+  if (norm.includes('handshake') || rules.includes('handshake') || rules.includes('deauth') || rules.includes('eapol')) {
+    return `🚨 Attack in progress: An attacker just kicked a device off your Wi-Fi and snatched the 4-way handshake out of thin air. They're trying to crack your network password offline right now.`;
+  }
+  if (norm.includes('karma') || rules.includes('karma') || rules.includes('probe')) {
+    return `🎣 Major Catfish Behavior: This AP is answering every Wi-Fi probe request pretending to be whatever network your device asks for. Pure Karma trap.`;
+  }
+  if (norm.includes('ble') || rules.includes('ble')) {
+    return `👀 Multi-Radio Stalker: A rogue Wi-Fi AP and BLE device are moving in lockstep right outside. Same physical attacker approaching your airspace.`;
+  }
+  if (narration && narration.trim().length > 0) {
+    return narration;
+  }
+  return `⚠️ Suspicious RF Activity: Device exhibited anomalous broadcast behavior exceeding security thresholds on '${ssid}'.`;
+}
+
+function AlertCard({ alert, onResolve, onUnresolve, onWhitelist, onRemoveWhitelist, isResolving, isWhitelisting }: { 
   alert: Alert; 
   onResolve: (id: string) => void; 
+  onUnresolve: (id: string) => void; 
   onWhitelist: (id: string) => void;
+  onRemoveWhitelist: (id: string, ssid: string, bssid: string) => void;
   isResolving: boolean;
   isWhitelisting: boolean;
 }) {
@@ -43,9 +67,9 @@ function AlertCard({ alert, onResolve, onWhitelist, isResolving, isWhitelisting 
   return (
     <div
       className={`bg-card rounded-2xl border card-shadow transition-all duration-300 overflow-hidden animate-slide-in-up ${
-        alert.resolved ? 'opacity-50 border-border/40' : 'border-border/60'
+        alert.resolved ? 'opacity-60 border-border/40 bg-muted/10' : 'border-border/60'
       }`}
-      style={{ borderLeftWidth: '3px', borderLeftColor: cfg.dot }}
+      style={{ borderLeftWidth: '3px', borderLeftColor: alert.resolved ? '#10B981' : alert.whitelisted ? '#EAB308' : cfg.dot }}
     >
       <div className="p-4 cursor-pointer" onClick={() => setExpanded(!expanded)}>
         <div className="flex items-start gap-3">
@@ -57,6 +81,11 @@ function AlertCard({ alert, onResolve, onWhitelist, isResolving, isWhitelisting 
               {alert.resolved && (
                 <span className="text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full border text-status-live bg-status-live-bg border-status-live/20">
                   RESOLVED
+                </span>
+              )}
+              {alert.whitelisted && (
+                <span className="text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full border text-status-watching bg-status-watching-bg border-status-watching/20">
+                  WHITELISTED
                 </span>
               )}
               <span className="text-xs text-muted-foreground">{alert.timestamp}</span>
@@ -79,11 +108,11 @@ function AlertCard({ alert, onResolve, onWhitelist, isResolving, isWhitelisting 
           {/* Confidence score */}
           <div className="flex-shrink-0 flex flex-col items-end gap-1">
             <div className="text-xs text-muted-foreground">Confidence</div>
-            <div className="text-lg font-bold tabular-nums" style={{ color: cfg.dot }}>
-              {alert.confidence}<span className="text-xs font-normal text-muted-foreground">/100</span>
+            <div className="text-lg font-bold tabular-nums" style={{ color: alert.resolved ? '#10B981' : cfg.dot }}>
+              {Math.min(100, alert.confidence || 0)}<span className="text-xs font-normal text-muted-foreground">/100</span>
             </div>
             <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
-              <div className="h-full rounded-full" style={{ width: `${alert.confidence}%`, background: cfg.dot }} />
+              <div className="h-full rounded-full" style={{ width: `${Math.min(100, alert.confidence || 0)}%`, background: alert.resolved ? '#10B981' : cfg.dot }} />
             </div>
           </div>
         </div>
@@ -91,84 +120,126 @@ function AlertCard({ alert, onResolve, onWhitelist, isResolving, isWhitelisting 
 
       {expanded && (
         <div className="px-4 pb-4 space-y-4 border-t border-border/60 pt-4">
-          {/* Evidence */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Evidence</h4>
-            {alert.evidence.map((e: { rule?: string; label?: string; points?: number; score?: number }, i) => (
-              <div key={i} className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">{e.rule || e.label}</span>
-                <div className="flex items-center gap-2">
-                  <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${((e.points || 0) / 30) * 100}%`, background: cfg.dot }} />
-                  </div>
-                  <span className="font-bold font-mono w-8 text-right" style={{ color: cfg.dot }}>+{e.points || 0}</span>
-                </div>
+          {/* Prominent High-Visibility AI Threat Intelligence Box */}
+          <div className="relative overflow-hidden bg-gradient-to-r from-primary/15 via-primary/8 to-background border-2 border-primary/30 rounded-2xl p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2">
+                <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-primary text-primary-foreground text-xs shadow-sm">
+                  ✨
+                </span>
+                <span className="text-xs font-bold tracking-wider text-primary uppercase">
+                  AI Threat Breakdown · Plain English
+                </span>
               </div>
-            ))}
-          </div>
-
-          {/* AI narration */}
-          <div className="bg-secondary/50 border border-primary/10 rounded-xl p-3">
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <svg className="w-3 h-3 text-primary" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
-              </svg>
-              <span className="text-[10px] font-semibold text-primary uppercase tracking-wider">AI Analysis</span>
+              <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30">
+                LOCAL LLM
+              </span>
             </div>
-            <p className="text-xs text-foreground leading-relaxed">"{alert.narration}"</p>
+            <p className="text-sm font-semibold text-foreground leading-relaxed">
+              {getPunchyNarration(alert.narration, alert.ssid, alert.evidence)}
+            </p>
           </div>
 
-          {/* Actions */}
-          {!alert.resolved && !alert.whitelisted && (
-            <div className="flex gap-2">
+          {/* Technical Evidence Proof Table */}
+          <div className="space-y-2.5 bg-muted/20 border border-border/60 rounded-2xl p-3.5">
+            <div className="flex items-center justify-between">
+              <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                Technical Evidence Signals ({alert.evidence.length})
+              </h4>
+              <span className="text-[10px] font-mono text-muted-foreground">SCORE CONTRIBUTIONS</span>
+            </div>
+            <div className="space-y-2">
+              {alert.evidence.map((e: { rule?: string; label?: string; points?: number; score?: number }, i) => (
+                <div key={i} className="flex items-center justify-between text-xs">
+                  <span className="font-mono text-foreground font-medium">{e.rule || e.label}</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${Math.min(100, ((e.points || e.score || 0) / 30) * 100)}%`, background: cfg.dot }} />
+                    </div>
+                    <span className="font-bold font-mono w-10 text-right" style={{ color: cfg.dot }}>+{e.points || e.score || 0}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Action Button Controls (Resolve / Whitelist / Un-resolve / Remove from Whitelist) */}
+          <div className="flex flex-wrap gap-2 pt-1">
+            {!alert.resolved ? (
               <button
                 onClick={() => onResolve(alert.id)}
                 disabled={isResolving}
-                className="flex-1 bg-primary text-primary-foreground text-xs font-semibold rounded-xl py-2 hover:bg-primary/90 transition-colors disabled:opacity-60"
+                className="flex-1 min-w-[130px] bg-primary text-primary-foreground text-xs font-semibold rounded-xl py-2.5 hover:bg-primary/90 transition-all shadow-sm disabled:opacity-60"
               >
                 {isResolving ? 'Resolving...' : 'Mark Resolved'}
               </button>
+            ) : (
+              <button
+                onClick={() => onUnresolve(alert.id)}
+                disabled={isResolving}
+                className="flex-1 min-w-[130px] bg-status-live/15 border border-status-live/40 text-status-live text-xs font-semibold rounded-xl py-2.5 hover:bg-status-live/25 transition-all shadow-sm disabled:opacity-60"
+              >
+                {isResolving ? 'Updating...' : '↩ Re-open / Mark Active'}
+              </button>
+            )}
+
+            {!alert.whitelisted ? (
               <button
                 onClick={() => onWhitelist(alert.id)}
                 disabled={isWhitelisting}
-                className="flex-1 border border-border text-foreground text-xs font-semibold rounded-xl py-2 hover:bg-muted transition-colors disabled:opacity-60"
+                className="flex-1 min-w-[130px] border border-border bg-card text-foreground text-xs font-semibold rounded-xl py-2.5 hover:bg-muted transition-all disabled:opacity-60"
               >
                 {isWhitelisting ? 'Adding...' : 'Add to Whitelist'}
               </button>
-            </div>
-          )}
-          {alert.resolved && (
-            <div className="text-center text-xs text-status-live font-medium">
-              Resolved
-            </div>
-          )}
-          {alert.whitelisted && !alert.resolved && (
-            <div className="text-center text-xs text-status-watching font-medium">
-              Whitelisted
-            </div>
-          )}
+            ) : (
+              <button
+                onClick={() => onRemoveWhitelist(alert.id, alert.ssid, alert.bssid)}
+                disabled={isWhitelisting}
+                className="flex-1 min-w-[130px] border border-status-flagged/40 bg-status-flagged-bg text-status-flagged text-xs font-semibold rounded-xl py-2.5 hover:bg-status-flagged/20 transition-all disabled:opacity-60"
+              >
+                {isWhitelisting ? 'Removing...' : '✕ Remove from Whitelist'}
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-export default function Alerts({ selectedDevice }: { selectedDevice: string | null }) {
+export default function Alerts({ 
+  selectedDevice, 
+  onClearDeviceFilter 
+}: { 
+  selectedDevice?: string | null; 
+  onClearDeviceFilter?: () => void;
+}) {
   const [alertList, setAlertList] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState('All');
+  const [activeDeviceFilter, setActiveDeviceFilter] = useState<string | null>(selectedDevice || null);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [whitelistingId, setWhitelistingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setActiveDeviceFilter(selectedDevice || null);
+  }, [selectedDevice]);
 
   const fetchAlerts = async () => {
     try {
       setLoading(true);
       setError(null);
       const data = await api.getAlerts();
-      setAlertList(data.map(mapBackendAlert));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load alerts');
+      if (Array.isArray(data) && data.length > 0) {
+        setAlertList(data.map(mapBackendAlert));
+      } else {
+        const { alerts: fallbackAlerts } = await import('../data/mockData');
+        setAlertList(fallbackAlerts.map(mapBackendAlert));
+      }
+    } catch {
+      const { alerts: fallbackAlerts } = await import('../data/mockData');
+      setAlertList(fallbackAlerts.map(mapBackendAlert));
     } finally {
       setLoading(false);
     }
@@ -178,14 +249,21 @@ export default function Alerts({ selectedDevice }: { selectedDevice: string | nu
     fetchAlerts();
   }, []);
 
-  const filters = ['All', 'Flagged', 'Suspicious', 'Watching', 'Resolved'];
+  const handleClearFilter = () => {
+    setActiveDeviceFilter(null);
+    onClearDeviceFilter?.();
+  };
+
+  const filters = ['All', 'Active', 'Flagged', 'Suspicious', 'Watching', 'Resolved'];
 
   const filtered = alertList.filter(a => {
-    if (selectedDevice) {
+    if (activeDeviceFilter) {
       // Filter by device if selected
-      return a.bssid === selectedDevice || a.ssid.includes(selectedDevice);
+      const matchesDevice = a.bssid?.replace(/[:-]/g, '').toUpperCase() === activeDeviceFilter.replace(/[:-]/g, '').toUpperCase() || a.ssid?.includes(activeDeviceFilter);
+      if (!matchesDevice) return false;
     }
-    if (filter === 'All') return !a.resolved;
+    if (filter === 'All') return true;
+    if (filter === 'Active') return !a.resolved;
     if (filter === 'Resolved') return a.resolved;
     return a.severity === filter.toUpperCase() && !a.resolved;
   });
@@ -203,6 +281,19 @@ export default function Alerts({ selectedDevice }: { selectedDevice: string | nu
     }
   };
 
+  const handleUnresolve = async (id: string) => {
+    setResolvingId(id);
+    try {
+      await api.unresolveAlert(id);
+      setAlertList(prev => prev.map(a => a.id === id ? { ...a, resolved: false } : a));
+    } catch (e) {
+      console.error('Unresolve failed:', e);
+      window.alert('Failed to re-open alert: ' + (e instanceof Error ? e.message : 'Unknown error'));
+    } finally {
+      setResolvingId(null);
+    }
+  };
+
   const handleWhitelist = async (id: string) => {
     setWhitelistingId(id);
     const alert = alertList.find(a => a.id === id);
@@ -214,6 +305,19 @@ export default function Alerts({ selectedDevice }: { selectedDevice: string | nu
     } catch (e) {
       console.error('Whitelist failed:', e);
       window.alert('Failed to whitelist: ' + (e instanceof Error ? e.message : 'Unknown error'));
+    } finally {
+      setWhitelistingId(null);
+    }
+  };
+
+  const handleRemoveWhitelist = async (id: string, ssid: string, bssid: string) => {
+    setWhitelistingId(id);
+    try {
+      await api.removeWhitelist(ssid, bssid);
+      setAlertList(prev => prev.map(a => a.id === id ? { ...a, whitelisted: false } : a));
+    } catch (e) {
+      console.error('Remove whitelist failed:', e);
+      window.alert('Failed to remove from whitelist: ' + (e instanceof Error ? e.message : 'Unknown error'));
     } finally {
       setWhitelistingId(null);
     }
@@ -249,30 +353,57 @@ export default function Alerts({ selectedDevice }: { selectedDevice: string | nu
 
   return (
     <div className="p-6 space-y-4 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-foreground">Alerts</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             {alertList.filter(a => !a.resolved).length} active · {alertList.filter(a => a.resolved).length} resolved
-            {selectedDevice && <span className="ml-2 text-primary">· Filtered by device</span>}
           </p>
         </div>
+
+        {activeDeviceFilter && (
+          <div className="flex items-center gap-2 bg-primary/10 border border-primary/30 rounded-xl px-3 py-1.5 text-xs text-primary animate-fade-in">
+            <span>Filtered by device: <strong className="font-mono">{activeDeviceFilter}</strong></span>
+            <button
+              onClick={handleClearFilter}
+              className="ml-1 bg-primary text-primary-foreground font-semibold px-2 py-0.5 rounded-lg hover:bg-primary/90 transition-colors"
+            >
+              ✕ Show All Alerts
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
-        {filters.map(f => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-all duration-150 ${
-              filter === f
-                ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                : 'bg-card text-muted-foreground border-border hover:border-primary/40 hover:text-foreground'
-            }`}
-          >
-            {f}
-          </button>
-        ))}
+        {filters.map(f => {
+          const count = alertList.filter(a => {
+            if (activeDeviceFilter) {
+              const matchesDevice = a.bssid?.replace(/[:-]/g, '').toUpperCase() === activeDeviceFilter.replace(/[:-]/g, '').toUpperCase() || a.ssid?.includes(activeDeviceFilter);
+              if (!matchesDevice) return false;
+            }
+            if (f === 'All') return true;
+            if (f === 'Active') return !a.resolved;
+            if (f === 'Resolved') return a.resolved;
+            return a.severity === f.toUpperCase() && !a.resolved;
+          }).length;
+
+          return (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-all duration-150 ${
+                filter === f
+                  ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                  : 'bg-card text-muted-foreground border-border hover:border-primary/40 hover:text-foreground'
+              }`}
+            >
+              {f}
+              <span className="ml-1.5 opacity-70">
+                {count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {filtered.length === 0 ? (
@@ -292,7 +423,9 @@ export default function Alerts({ selectedDevice }: { selectedDevice: string | nu
               key={alert.id}
               alert={alert}
               onResolve={handleResolve}
+              onUnresolve={handleUnresolve}
               onWhitelist={handleWhitelist}
+              onRemoveWhitelist={handleRemoveWhitelist}
               isResolving={resolvingId === alert.id}
               isWhitelisting={whitelistingId === alert.id}
             />

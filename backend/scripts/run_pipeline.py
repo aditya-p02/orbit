@@ -65,7 +65,10 @@ def make_on_alert(loop: asyncio.AbstractEventLoop | None, pipeline_state=None):
             conn,
             mac=dev.bssid, ssid=dev.ssid,
             state=dev.state.value, score=dev.score,
-            vendor=getattr(frame, "vendor_addr2", None),
+            vendor=dev.vendor or getattr(frame, "vendor_addr2", None),
+            channel=dev.channel,
+            rssi=dev.rssi,
+            device_type=dev.device_type,
             ts=ts,
         )
 
@@ -212,7 +215,11 @@ def main() -> None:
                         conn,
                         mac=dev.bssid, ssid=dev.ssid,
                         state=dev.state.value, score=dev.score,
-                        vendor=None, ts=dev.last_seen or time.time(),
+                        vendor=dev.vendor,
+                        channel=dev.channel,
+                        rssi=dev.rssi,
+                        device_type=dev.device_type,
+                        ts=dev.last_seen or time.time(),
                     )
                 if pipeline_state and api_loop:
                     from orbit.api.main import _push_device

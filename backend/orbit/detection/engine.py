@@ -136,6 +136,18 @@ class DetectionEngine:
         if isinstance(item, IngestedFrame) and item.envelope.get("type") == "ble":
             addr  = item.envelope.get("address", "")
             rssi  = item.envelope.get("rssi", -100)
+            if addr:
+                ble_dev = self.registry.get_or_create(
+                    bssid=addr,
+                    ssid="BLE Tracking Beacon",
+                    device_type="BLE",
+                    channel=0,
+                    rssi=rssi,
+                    vendor="BLE Peripheral",
+                )
+                ble_dev.last_seen = ts
+                ble_dev.rssi = rssi
+
             self.ble.observe_ble(addr, rssi, ts)
             # check if any flagged BSSID correlates with this BLE device
             for dev in self.registry.all_devices():
@@ -145,6 +157,20 @@ class DetectionEngine:
                 for hit in hits:
                     self._apply_hits(dev.bssid, dev.ssid or "", frame, [hit], ts)
             return
+
+        # --- Track client devices from probe requests / client transmissions ---
+        client_mac = (frame.addr2 or "").upper().replace(":", "")
+        if client_mac and not client_mac.startswith("FF") and client_mac != (frame.addr3 or "").upper().replace(":", ""):
+            if frame.subtype == 0x04 or frame.is_eapol or frame.subtype in (_SUBTYPE_DEAUTH, _SUBTYPE_DISASSOC):
+                c_dev = self.registry.get_or_create(
+                    bssid=client_mac,
+                    ssid="Client Station",
+                    device_type="Client",
+                    channel=frame.channel_reported,
+                    rssi=frame.rssi,
+                )
+                c_dev.last_seen = ts
+                c_dev.rssi = frame.rssi
 
         # --- EAPOL frames: handshake detection (Stage 2) ---
         if frame.is_eapol:
@@ -159,6 +185,16 @@ class DetectionEngine:
             and frame.subtype in (_SUBTYPE_BEACON, _SUBTYPE_PROBE_RESP)
             and self.whitelist.is_trusted_bssid(frame.ssid, frame.addr3)
         ):
+            dev = self.registry.get_or_create(
+                bssid=frame.addr3,
+                ssid=frame.ssid,
+                device_type="AP",
+                channel=frame.ds_channel or frame.channel_reported,
+                rssi=frame.rssi,
+            )
+            dev.last_seen = ts
+            dev.rssi = frame.rssi
+            dev.channel = frame.ds_channel or frame.channel_reported
             self.baseline.update(
                 bssid=frame.addr3,
                 ssid=frame.ssid,
@@ -183,8 +219,18 @@ class DetectionEngine:
         # --- probe responses: Karma detection (Stage 2) ---
         if frame.subtype == _SUBTYPE_PROBE_RESP and frame.ssid:
             karma_hits = self.karma.observe(frame, ts)
+            dev = self.registry.get_or_create(
+                bssid=frame.addr3,
+                ssid="KarmaNet",
+                device_type="AP",
+                channel=frame.channel_reported,
+                rssi=frame.rssi,
+            )
+            dev.last_seen = ts
+            dev.rssi = frame.rssi
             if karma_hits:
-                self._apply_hits(frame.addr3, frame.ssid, frame, karma_hits, ts)
+                self._apply_hits(frame.addr3, "KarmaNet", frame, karma_hits, ts)
+            return
 
         # --- only score beacon / probe-response frames for evil-twin rules ---
         if frame.subtype not in (_SUBTYPE_BEACON, _SUBTYPE_PROBE_RESP):
@@ -194,10 +240,19 @@ class DetectionEngine:
         if not frame.ssid:
             return
 
-        # --- run evil-twin evidence checkers ---
-        hits: list[EvidenceHit] = []
+        # --- register all observed APs & run evil-twin evidence checkers ---
+        dev = self.registry.get_or_create(
+            bssid=frame.addr3,
+            ssid=frame.ssid,
+            device_type="AP",
+            channel=frame.ds_channel or frame.channel_reported,
+            rssi=frame.rssi,
+        )
+        dev.last_seen = ts
+        dev.rssi = frame.rssi
+        dev.channel = frame.ds_channel or frame.channel_reported
 
-        dev = self.registry.get_or_create(bssid=frame.addr3, ssid=frame.ssid)
+        hits: list[EvidenceHit] = []
         already_fired = {rule for rule, _ in dev.evidence}
 
         for checker in (
@@ -240,10 +295,10 @@ class DetectionEngine:
             if triggered:
                 newly_flagged = True
 
-        # alert with cooldown deduplication
-        if dev.state is TrustState.FLAGGED:
+        # alert with cooldown deduplication for FLAGGED and SUSPICIOUS
+        if dev.state in (TrustState.FLAGGED, TrustState.SUSPICIOUS):
             last = self._last_alert_ts.get(bssid, 0.0)
-            # alert if: newly flagged, OR new evidence added and cooldown elapsed,
+            # alert if: newly flagged/suspicious, OR new evidence added and cooldown elapsed,
             # OR new critical Stage-2 evidence (handshake rules always break through)
             stage2_critical = any(
                 h.rule in ("handshake_eapol_capture", "handshake_deauth_burst")

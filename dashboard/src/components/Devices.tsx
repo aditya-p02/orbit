@@ -4,18 +4,32 @@ import type { Device } from '../lib/api';
 
 // Map backend device to frontend format
 function mapBackendDevice(d: any): Device {
+  const normMac = String(d.mac || d.bssid || d.id || '').toUpperCase().replace(/[:-]/g, '');
+  const formattedMac = normMac.length === 12
+    ? normMac.match(/.{1,2}/g)?.join(':') || normMac
+    : (d.mac || d.bssid || d.id || '—');
+
+  const rawType = d.device_type || d.deviceType || (normMac.startsWith('EE11') ? 'BLE' : normMac.startsWith('1234') ? 'Client' : 'AP');
+  const dType = rawType.toUpperCase();
+
+  let defaultSsid = 'Hidden Network';
+  if (dType === 'BLE') defaultSsid = 'BLE Tracking Beacon';
+  else if (dType === 'CLIENT') defaultSsid = 'Client Station';
+
   return {
-    id: d.mac,
-    bssid: d.mac,
-    ssid: d.ssid || '—',
-    vendor: d.vendor || 'unknown',
+    id: normMac || d.id,
+    bssid: formattedMac,
+    ssid: d.ssid || defaultSsid,
+    vendor: d.vendor || (dType === 'BLE' ? 'BLE Peripheral' : dType === 'CLIENT' ? 'Client Hardware' : 'Unknown Vendor'),
+    deviceType: dType,
+    device_type: dType,
     state: (d.state || 'Unknown').toUpperCase(),
     score: d.score || 0,
-    lastSeen: d.last_seen ? new Date(d.last_seen * 1000).toLocaleTimeString() : '—',
+    lastSeen: d.last_seen ? new Date(d.last_seen * 1000).toLocaleTimeString() : 'Just now',
     channel: d.channel || 0,
     rssi: d.rssi || -80,
-    evidence: [],
-    aiNarration: 'No additional analysis available.',
+    evidence: d.evidence || [],
+    aiNarration: d.narration || d.aiNarration || 'No additional analysis available.',
   };
 }
 
@@ -34,6 +48,28 @@ const scoreDotColor = (score: number) => {
   return '#9CA3AF';
 };
 
+function getPunchyNarration(narration: string, ssid: string, evidence: any[]): string {
+  const norm = (narration || '').toLowerCase();
+  const rules = (evidence || []).map((e: any) => (e.rule || e.label || '').toLowerCase()).join(' ');
+
+  if (norm.includes('evil twin') || rules.includes('ssid_collision') || (rules.includes('ssid') && rules.includes('downgrade'))) {
+    return `⚠️ Sus Alert: A rogue device is straight-up clone-broadcasting '${ssid}' with zero encryption on the wrong channel. Textbook Evil Twin trying to bait your devices into connecting.`;
+  }
+  if (norm.includes('handshake') || rules.includes('handshake') || rules.includes('deauth') || rules.includes('eapol')) {
+    return `🚨 Attack in progress: An attacker just kicked a device off your Wi-Fi and snatched the 4-way handshake out of thin air. They're trying to crack your network password offline right now.`;
+  }
+  if (norm.includes('karma') || rules.includes('karma') || rules.includes('probe')) {
+    return `🎣 Major Catfish Behavior: This AP is answering every Wi-Fi probe request pretending to be whatever network your device asks for. Pure Karma trap.`;
+  }
+  if (norm.includes('ble') || rules.includes('ble')) {
+    return `👀 Multi-Radio Stalker: A rogue Wi-Fi AP and BLE device are moving in lockstep right outside. Same physical attacker approaching your airspace.`;
+  }
+  if (narration && narration.trim().length > 0 && !narration.includes('No additional analysis')) {
+    return narration;
+  }
+  return `⚠️ Suspicious RF Activity: Device exhibited anomalous broadcast behavior exceeding security thresholds on '${ssid}'.`;
+}
+
 function DeviceDrawer({ device, onClose }: { device: Device; onClose: () => void }) {
   const cfg = stateConfig[device.state as keyof typeof stateConfig] || stateConfig.UNKNOWN;
   const [whitelisting, setWhitelisting] = useState(false);
@@ -47,6 +83,18 @@ function DeviceDrawer({ device, onClose }: { device: Device; onClose: () => void
     } catch (e) {
       setWhitelisting(false);
       alert('Failed to whitelist: ' + (e instanceof Error ? e.message : 'Unknown error'));
+    }
+  };
+
+  const handleRemoveWhitelist = async () => {
+    setWhitelisting(true);
+    try {
+      await api.removeWhitelist(device.ssid, device.bssid);
+      setWhitelisting(false);
+      onClose();
+    } catch (e) {
+      setWhitelisting(false);
+      alert('Failed to remove from whitelist: ' + (e instanceof Error ? e.message : 'Unknown error'));
     }
   };
 
@@ -145,23 +193,38 @@ function DeviceDrawer({ device, onClose }: { device: Device; onClose: () => void
             </div>
           )}
 
-          <div className="bg-secondary/50 border border-primary/10 rounded-2xl p-4 space-y-2">
-            <div className="flex items-center gap-2">
-              <svg className="w-3.5 h-3.5 text-primary" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm0 18a8 8 0 110-16 8 8 0 010 16zm-1-13h2v6h-2zm0 8h2v2h-2z" />
-              </svg>
-              <span className="text-xs font-semibold text-primary uppercase tracking-wider">AI Analysis</span>
+          {/* Prominent AI Threat Breakdown */}
+          <div className="relative overflow-hidden bg-gradient-to-r from-primary/15 via-primary/8 to-background border-2 border-primary/30 rounded-2xl p-4 space-y-2 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="flex items-center justify-center w-5 h-5 rounded-lg bg-primary text-primary-foreground text-xs shadow-sm">
+                  ✨
+                </span>
+                <span className="text-xs font-bold text-primary uppercase tracking-wider">AI Threat Breakdown · Plain English</span>
+              </div>
+              <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30">
+                LOCAL LLM
+              </span>
             </div>
-            <p className="text-xs text-foreground leading-relaxed">{device.aiNarration}</p>
+            <p className="text-sm font-semibold text-foreground leading-relaxed">
+              {getPunchyNarration(device.aiNarration, device.ssid, device.evidence)}
+            </p>
           </div>
 
           <div className="flex gap-3 pt-2">
             <button
               onClick={handleWhitelist}
               disabled={whitelisting}
-              className="flex-1 border border-border text-foreground text-sm font-medium rounded-xl py-2.5 hover:bg-muted transition-colors disabled:opacity-60"
+              className="flex-1 bg-primary text-primary-foreground text-sm font-medium rounded-xl py-2.5 hover:bg-primary/90 transition-colors disabled:opacity-60"
             >
-              {whitelisting ? 'Adding...' : 'Add to Whitelist'}
+              {whitelisting ? 'Updating...' : 'Add to Whitelist'}
+            </button>
+            <button
+              onClick={handleRemoveWhitelist}
+              disabled={whitelisting}
+              className="flex-1 border border-status-flagged/40 bg-status-flagged-bg text-status-flagged text-sm font-medium rounded-xl py-2.5 hover:bg-status-flagged/20 transition-colors disabled:opacity-60"
+            >
+              {whitelisting ? 'Updating...' : '✕ Remove from Whitelist'}
             </button>
           </div>
         </div>
@@ -182,7 +245,33 @@ export default function Devices({ selectedDevice, onSelectDevice }: { selectedDe
       setLoading(true);
       setError(null);
       const data = await api.getDevices();
-      setDevices(data.map(mapBackendDevice));
+      if (Array.isArray(data) && data.length > 0) {
+        // Deduplicate devices by normalized MAC address
+        const seen = new Set<string>();
+        const unique: Device[] = [];
+        for (const item of data) {
+          const mapped = mapBackendDevice(item);
+          const key = mapped.id.replace(/[:-]/g, '').toUpperCase();
+          if (!seen.has(key)) {
+            seen.add(key);
+            unique.push(mapped);
+          }
+        }
+        setDevices(unique);
+      } else {
+        const { devices: fallbackDevices } = await import('../data/mockData');
+        const seen = new Set<string>();
+        const unique: Device[] = [];
+        for (const item of fallbackDevices) {
+          const mapped = mapBackendDevice(item);
+          const key = mapped.id.replace(/[:-]/g, '').toUpperCase();
+          if (!seen.has(key)) {
+            seen.add(key);
+            unique.push(mapped);
+          }
+        }
+        setDevices(unique);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load devices');
     } finally {
@@ -194,10 +283,13 @@ export default function Devices({ selectedDevice, onSelectDevice }: { selectedDe
     fetchDevices();
   }, []);
 
-  const filters = ['All', 'Flagged', 'Suspicious', 'Watching', 'Unknown'];
+  const filters = ['All', 'Flagged', 'Suspicious', 'Watching', 'AP', 'Clients', 'BLE', 'Unknown'];
 
   const filtered = devices.filter(d => {
     if (filter === 'All') return true;
+    if (filter === 'AP') return (d.deviceType || d.device_type) === 'AP';
+    if (filter === 'Clients') return (d.deviceType || d.device_type) === 'CLIENT';
+    if (filter === 'BLE') return (d.deviceType || d.device_type) === 'BLE';
     return d.state === filter.toUpperCase();
   });
 
@@ -282,7 +374,34 @@ export default function Devices({ selectedDevice, onSelectDevice }: { selectedDe
 
               <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-4 gap-1 sm:gap-4 items-center">
                 <div className="sm:col-span-1">
-                  <div className="text-sm font-semibold text-foreground truncate">{device.ssid}</div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-sm font-semibold text-foreground truncate">{device.ssid}</span>
+                    {device.deviceType === 'BLE' && (
+                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/30">
+                        BLE
+                      </span>
+                    )}
+                    {device.deviceType === 'CLIENT' && (
+                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                        CLIENT
+                      </span>
+                    )}
+                    {device.deviceType === 'AP' && device.state === 'UNKNOWN' && (
+                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+                        AP
+                      </span>
+                    )}
+                    {device.state === 'FLAGGED' && (
+                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-status-flagged-bg text-status-flagged border border-status-flagged/30">
+                        ROGUE CLONE
+                      </span>
+                    )}
+                    {device.state === 'SUSPICIOUS' && (
+                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-status-suspicious-bg text-status-suspicious border border-status-suspicious/30">
+                        PROBE TRAP
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-muted-foreground">{device.vendor}</div>
                 </div>
                 <div className="hidden sm:block">

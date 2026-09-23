@@ -43,6 +43,9 @@ def init_db() -> None:
             state       TEXT NOT NULL DEFAULT 'Unknown',
             score       INTEGER NOT NULL DEFAULT 0,
             vendor      TEXT,
+            channel     INTEGER DEFAULT 0,
+            rssi        INTEGER DEFAULT -80,
+            device_type TEXT DEFAULT 'AP',
             first_seen  REAL NOT NULL,
             last_seen   REAL NOT NULL
         );
@@ -83,4 +86,16 @@ def init_db() -> None:
             timestamp   REAL NOT NULL
         );
     """)
+
+    # Ensure optional columns exist in existing databases
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(devices)")
+    cols = {row[1] for row in cursor.fetchall()}
+    if "channel" not in cols:
+        conn.execute("ALTER TABLE devices ADD COLUMN channel INTEGER DEFAULT 0")
+    if "rssi" not in cols:
+        conn.execute("ALTER TABLE devices ADD COLUMN rssi INTEGER DEFAULT -80")
+    if "device_type" not in cols:
+        conn.execute("ALTER TABLE devices ADD COLUMN device_type TEXT DEFAULT 'AP'")
+
     conn.commit()

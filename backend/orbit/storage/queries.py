@@ -31,19 +31,25 @@ def upsert_device(
     ssid: str | None,
     state: str,
     score: int,
-    vendor: str | None,
+    vendor: str | None = None,
+    channel: int | None = None,
+    rssi: int | None = None,
+    device_type: str | None = "AP",
     ts: float,
 ) -> None:
     conn.execute("""
-        INSERT INTO devices (mac, ssid, state, score, vendor, first_seen, last_seen)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO devices (mac, ssid, state, score, vendor, channel, rssi, device_type, first_seen, last_seen)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(mac) DO UPDATE SET
-            ssid      = COALESCE(excluded.ssid, ssid),
-            state     = excluded.state,
-            score     = excluded.score,
-            vendor    = COALESCE(excluded.vendor, vendor),
-            last_seen = excluded.last_seen
-    """, (mac, ssid, state, score, vendor, ts, ts))
+            ssid        = COALESCE(excluded.ssid, ssid),
+            state       = excluded.state,
+            score       = excluded.score,
+            vendor      = COALESCE(excluded.vendor, vendor),
+            channel     = CASE WHEN excluded.channel > 0 THEN excluded.channel ELSE channel END,
+            rssi        = CASE WHEN excluded.rssi != -80 THEN excluded.rssi ELSE rssi END,
+            device_type = COALESCE(excluded.device_type, device_type),
+            last_seen   = excluded.last_seen
+    """, (mac, ssid, state, score, vendor, channel or 0, rssi if rssi is not None else -80, device_type or "AP", ts, ts))
     conn.commit()
 
 
@@ -75,12 +81,28 @@ def insert_alert(
     ts: float | None = None,
 ) -> int:
     ts = ts or time.time()
-    cur = conn.execute("""
-        INSERT INTO alerts (device_mac, ssid, bssid, score, evidence_json, narration, timestamp, resolved)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 0)
-    """, (device_mac, ssid, bssid, score, json.dumps(evidence), narration, ts))
-    conn.commit()
-    return cur.lastrowid  # type: ignore[return-value]
+    # Check if there is an existing unresolved alert for this BSSID
+    existing = conn.execute(
+        "SELECT id FROM alerts WHERE bssid = ? AND resolved = 0",
+        (bssid,)
+    ).fetchone()
+
+    if existing:
+        alert_id = existing[0]
+        conn.execute("""
+            UPDATE alerts
+            SET score = ?, evidence_json = ?, narration = ?, timestamp = ?, ssid = COALESCE(?, ssid)
+            WHERE id = ?
+        """, (score, json.dumps(evidence), narration, ts, ssid, alert_id))
+        conn.commit()
+        return alert_id
+    else:
+        cur = conn.execute("""
+            INSERT INTO alerts (device_mac, ssid, bssid, score, evidence_json, narration, timestamp, resolved)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+        """, (device_mac, ssid, bssid, score, json.dumps(evidence), narration, ts))
+        conn.commit()
+        return cur.lastrowid  # type: ignore[return-value]
 
 
 def get_all_alerts(conn: sqlite3.Connection) -> list[dict]:
@@ -106,6 +128,12 @@ def get_alert(conn: sqlite3.Connection, alert_id: int) -> dict | None:
 
 def resolve_alert(conn: sqlite3.Connection, alert_id: int) -> bool:
     cur = conn.execute("UPDATE alerts SET resolved = 1 WHERE id = ?", (alert_id,))
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def unresolve_alert(conn: sqlite3.Connection, alert_id: int) -> bool:
+    cur = conn.execute("UPDATE alerts SET resolved = 0 WHERE id = ?", (alert_id,))
     conn.commit()
     return cur.rowcount > 0
 

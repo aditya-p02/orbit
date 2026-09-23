@@ -14,8 +14,11 @@ venv/
 
 # --- Runtime data (regenerated, don't commit) ---
 data/
-backend/*.db
-backend/orbit.db
+backend/*.db*
+backend/*.log
+*.log
+*cookies*.txt
+
 
 # --- Dashboard (once Phase 5 lands) ---
 dashboard/node_modules/

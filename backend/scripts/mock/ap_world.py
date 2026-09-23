@@ -62,6 +62,28 @@ ROGUE_BACKGROUND_AP = APProfile(
     trusted=False,
 )
 
+OFFICE_MESH_AP = APProfile(
+    name="office_mesh",
+    bssid="CC:DD:EE:00:33:44",
+    ssid="NETGEAR-Office",
+    channel=1,
+    open_network=False,
+    pmf_capable=True,
+    wps=False,
+    trusted=False,
+)
+
+HOTSPOT_AP = APProfile(
+    name="android_hotspot",
+    bssid="50:C7:BF:11:22:33",
+    ssid="AndroidAP",
+    channel=6,
+    open_network=False,
+    pmf_capable=False,
+    wps=False,
+    trusted=False,
+)
+
 EVIL_TWIN_AP = APProfile(
     name="evil_twin",
     bssid="AA:BB:CC:00:11:99",  # same vendor-looking prefix, different NIC
@@ -90,18 +112,18 @@ EVIL_TWIN_AP2 = APProfile(
 KARMA_AP = APProfile(
     name="karma_ap",
     bssid="EE:FF:00:11:22:33",
-    ssid="KarmaNet",             # its own SSID (will also respond to others)
+    ssid="KarmaNet",             # its own SSID
     channel=6,
     open_network=True,
     pmf_capable=False,
     wps=False,
     trusted=False,
-    active_after_s=15.0,        # appears 15s in
+    active_after_s=0.0,         # active immediately
 )
 
 # SSIDs the Karma AP pretends to be (in addition to its own)
 KARMA_AP_EXTRA_SSIDS = ["HomeNet-5G", "OfficeWiFi", "AndroidAP"]
 
-ALL_APS = [TRUSTED_AP, ROGUE_BACKGROUND_AP, EVIL_TWIN_AP, EVIL_TWIN_AP2, KARMA_AP]
+ALL_APS = [TRUSTED_AP, ROGUE_BACKGROUND_AP, OFFICE_MESH_AP, HOTSPOT_AP, EVIL_TWIN_AP, KARMA_AP]
 
 CLIENT_MAC = "12:34:56:78:9A:BC"

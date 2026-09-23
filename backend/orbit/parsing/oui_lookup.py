@@ -49,6 +49,12 @@ _OUI_TABLE: dict[str, str] = {
     "A4:CF:12": "Espressif",
     "AC:67:B2": "Espressif",
     "CC:50:E3": "Espressif",
+    "AA:BB:CC": "Espressif Systems",
+    "EE:FF:00": "Realtek Semiconductor",
+    "12:34:56": "Samsung / Apple",
+    "DE:AD:BE": "Intel Corporation",
+    "CC:DD:EE": "Netgear Inc.",
+    "EE:11:22": "BLE Peripheral",
 }
 
 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { api } from '../lib/api';
 import { devices, alerts, nodes } from '../data/mockData';
 
 interface MetricCardProps {
@@ -51,7 +52,7 @@ function MetricCard({ label, value, sub, color = 'text-foreground', icon, delay 
   );
 }
 
-function OrbitVisualization() {
+function OrbitVisualization({ devicesList }: { devicesList: any[] }) {
   const canvasRef = useRef<SVGSVGElement>(null);
   const [tick, setTick] = useState(0);
 
@@ -66,12 +67,19 @@ function OrbitVisualization() {
   const nodeA = { x: centerX - 110, y: centerY - 50 };
   const nodeB = { x: centerX + 115, y: centerY - 40 };
 
-  const devicePositions = [
-    { x: centerX - 60, y: centerY + 80, state: 'FLAGGED', label: 'HomeNet-5G' },
-    { x: centerX + 80, y: centerY + 70, state: 'SUSPICIOUS', label: 'CoffeeShop' },
-    { x: centerX + 130, y: centerY + 20, state: 'WATCHING', label: 'NETGEAR' },
-    { x: centerX - 130, y: centerY + 30, state: 'UNKNOWN', label: 'TP-Link' },
-  ];
+  const angles = [120, 240, 45, 300, 180, 0, 150, 330];
+  const radius = 105;
+  const list = Array.isArray(devicesList) && devicesList.length > 0 ? devicesList : devices;
+  const devicePositions = list.slice(0, 8).map((d, i) => {
+    const angle = (angles[i % angles.length] * Math.PI) / 180;
+    const r = radius + (i % 2 === 0 ? -12 : 12);
+    return {
+      x: centerX + Math.cos(angle) * r,
+      y: centerY + Math.sin(angle) * r,
+      state: (d.state || 'UNKNOWN').toUpperCase(),
+      label: (d.ssid || 'Hidden Network').length > 14 ? (d.ssid || '').slice(0, 12) + '…' : (d.ssid || 'Hidden Network'),
+    };
+  });
 
   const stateColors: Record<string, string> = {
     FLAGGED: '#EF4444',
@@ -83,8 +91,8 @@ function OrbitVisualization() {
   const particles = [
     { path: `M${nodeA.x},${nodeA.y} Q${centerX - 55},${centerY - 20} ${centerX},${centerY}`, speed: 0.8 },
     { path: `M${nodeB.x},${nodeB.y} Q${centerX + 55},${centerY - 20} ${centerX},${centerY}`, speed: 1.1 },
-    { path: `M${centerX},${centerY} Q${centerX - 30},${centerY + 40} ${devicePositions[0].x},${devicePositions[0].y}`, speed: 0.6 },
-    { path: `M${centerX},${centerY} Q${centerX + 40},${centerY + 35} ${devicePositions[1].x},${devicePositions[1].y}`, speed: 0.9 },
+    ...(devicePositions[0] ? [{ path: `M${centerX},${centerY} Q${centerX - 30},${centerY + 40} ${devicePositions[0].x},${devicePositions[0].y}`, speed: 0.6 }] : []),
+    ...(devicePositions[1] ? [{ path: `M${centerX},${centerY} Q${centerX + 40},${centerY + 35} ${devicePositions[1].x},${devicePositions[1].y}`, speed: 0.9 }] : []),
   ];
 
   const t = (tick * 50) / 1000;
@@ -189,12 +197,80 @@ function OrbitVisualization() {
 }
 
 export default function Overview() {
-  const flaggedCount = devices.filter(d => d.state === 'FLAGGED').length;
-  const activeAlerts = alerts.filter(a => !a.resolved).length;
-  const totalDevices = devices.length;
-  const avgFps = nodes.reduce((s, n) => s + n.framesPerSec, 0) / nodes.length;
+  const [liveDevices, setLiveDevices] = useState<any[]>(devices);
+  const [liveAlerts, setLiveAlerts] = useState<any[]>(alerts);
+  const [fps, setFps] = useState(16.5);
 
-  const topDevice = devices.find(d => d.state === 'FLAGGED') || devices[0];
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [devData, alertData, healthData] = await Promise.all([
+          api.getDevices().catch(() => null),
+          api.getAlerts().catch(() => null),
+          api.getHealth().catch(() => null),
+        ]);
+
+        if (Array.isArray(devData) && devData.length > 0) {
+          const seen = new Set<string>();
+          const unique: any[] = [];
+          for (const d of devData) {
+            const key = String(d.mac || d.bssid || d.id || '').toUpperCase().replace(/[:-]/g, '');
+            if (!seen.has(key)) {
+              seen.add(key);
+              unique.push({
+                ...d,
+                id: key || d.id,
+                bssid: d.mac || d.bssid,
+                state: (d.state || 'UNKNOWN').toUpperCase(),
+              });
+            }
+          }
+          setLiveDevices(unique);
+        }
+
+        if (Array.isArray(alertData)) {
+          setLiveAlerts(alertData);
+        }
+
+        if (healthData && healthData.nodes) {
+          const rates = Object.values(healthData.nodes).map((n: any) => n.fps || n.frames_per_sec || 0);
+          if (rates.length > 0) {
+            setFps(rates.reduce((a: number, b: number) => a + b, 0) / rates.length);
+          }
+        }
+      } catch {
+        // use fallback mock data
+      }
+    };
+
+    fetchData();
+    const interval = setInterval(fetchData, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const flaggedCount = liveDevices.filter(d => (d.state || '').toUpperCase() === 'FLAGGED').length;
+  const activeAlerts = liveAlerts.filter(a => !a.resolved).length;
+  const totalDevices = liveDevices.length;
+
+  // Enrich top device with alert evidence & narration if available
+  const rawTop = liveDevices.find(d => (d.state || '').toUpperCase() === 'FLAGGED') 
+    || liveDevices.find(d => (d.state || '').toUpperCase() === 'SUSPICIOUS')
+    || liveDevices[0] 
+    || devices[0];
+
+  const matchingAlert = liveAlerts.find(a => 
+    (a.bssid && rawTop.bssid && a.bssid.replace(/[:-]/g, '').toUpperCase() === rawTop.bssid.replace(/[:-]/g, '').toUpperCase()) ||
+    (a.ssid && rawTop.ssid && a.ssid === rawTop.ssid)
+  );
+
+  const topDevice = {
+    ...rawTop,
+    evidence: (rawTop.evidence && rawTop.evidence.length > 0) 
+      ? rawTop.evidence 
+      : (matchingAlert?.evidence || devices[0].evidence),
+    aiNarration: rawTop.narration || rawTop.aiNarration || matchingAlert?.narration || devices[0].aiNarration,
+    score: rawTop.score || matchingAlert?.score || devices[0].score,
+  };
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
@@ -251,7 +327,7 @@ export default function Overview() {
         />
         <MetricCard
           label="Frames / sec"
-          value={Math.round(avgFps * 10) / 10}
+          value={Math.round(fps * 10) / 10}
           sub="Avg across nodes"
           delay={200}
           icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>}
@@ -281,7 +357,7 @@ export default function Overview() {
             </div>
           </div>
           <div className="h-64 flex items-center justify-center">
-            <OrbitVisualization />
+            <OrbitVisualization devicesList={liveDevices} />
           </div>
           <div className="flex items-center gap-4 pt-1 border-t border-border/60 text-xs text-muted-foreground">
             {[
@@ -330,17 +406,17 @@ export default function Overview() {
 
           {/* Evidence breakdown */}
           <div className="space-y-2 flex-1">
-            {topDevice.evidence.map((e, i) => (
+            {(topDevice.evidence || []).map((e: any, i: number) => (
               <div key={i} className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">{e.label}</span>
+                <span className="text-muted-foreground">{e.label || e.rule}</span>
                 <div className="flex items-center gap-2">
                   <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
                     <div
                       className="h-full rounded-full bg-status-flagged"
-                      style={{ width: `${(e.score / 30) * 100}%` }}
+                      style={{ width: `${((e.score || e.points || 0) / 30) * 100}%` }}
                     />
                   </div>
-                  <span className="font-semibold text-status-flagged font-mono w-8 text-right">+{e.score}</span>
+                  <span className="font-semibold text-status-flagged font-mono w-8 text-right">+{e.score || e.points || 0}</span>
                 </div>
               </div>
             ))}
@@ -363,26 +439,28 @@ export default function Overview() {
         <div className="bg-card rounded-3xl card-shadow-md border border-border/60 p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-foreground text-sm">Recent Alerts</h2>
-            <span className="text-xs text-muted-foreground">{alerts.filter(a => !a.resolved).length} active</span>
+            <span className="text-xs text-muted-foreground">{liveAlerts.filter(a => !a.resolved).length} active</span>
           </div>
           <div className="space-y-3">
-            {alerts.slice(0, 3).map(a => {
+            {liveAlerts.slice(0, 3).map(a => {
+              const sev = (a.severity || (a.score >= 70 ? 'FLAGGED' : a.score >= 40 ? 'SUSPICIOUS' : 'WATCHING')).toUpperCase();
               const colors: Record<string, string> = {
                 FLAGGED: 'text-status-flagged bg-status-flagged-bg border-status-flagged/20',
                 SUSPICIOUS: 'text-status-suspicious bg-status-suspicious-bg border-status-suspicious/20',
                 WATCHING: 'text-status-watching bg-status-watching-bg border-status-watching/20',
               };
+              const timeStr = a.timestamp ? (typeof a.timestamp === 'number' ? new Date(a.timestamp * 1000).toLocaleTimeString() : a.timestamp) : 'Just now';
               return (
                 <div key={a.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted/50 transition-colors cursor-pointer">
-                  <span className={`text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full border ${colors[a.severity]}`}>
-                    {a.severity}
+                  <span className={`text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full border ${colors[sev] || colors.FLAGGED}`}>
+                    {sev}
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-foreground truncate">{a.ssid}</div>
-                    <div className="text-xs text-muted-foreground">{a.timestamp} · {a.vendor}</div>
+                    <div className="text-xs text-muted-foreground">{timeStr} · {a.vendor || 'Unknown'}</div>
                   </div>
-                  <div className="text-sm font-bold tabular-nums" style={{ color: a.severity === 'FLAGGED' ? '#EF4444' : '#F59E0B' }}>
-                    {a.confidence}
+                  <div className="text-sm font-bold tabular-nums" style={{ color: sev === 'FLAGGED' ? '#EF4444' : '#F59E0B' }}>
+                    {a.confidence || a.score || 0}
                   </div>
                 </div>
               );
