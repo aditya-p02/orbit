@@ -17,7 +17,7 @@ function formatEvent(raw: any, index: number): TimelineEvent {
   const score = raw.score || 0;
   if (score >= 70 || raw.event_type?.includes('collision') || raw.event_type?.includes('handshake') || raw.severity === 'FLAGGED') {
     sev = 'FLAGGED';
-  } else if (score >= 30 || raw.event_type?.includes('karma') || raw.event_type?.includes('deauth') || raw.severity === 'SUSPICIOUS') {
+  } else if (score >= 25 || raw.event_type?.includes('karma') || raw.event_type?.includes('deauth') || raw.severity === 'SUSPICIOUS') {
     sev = 'SUSPICIOUS';
   } else if (score >= 15 || raw.event_type?.includes('ble') || raw.event_type?.includes('mismatch') || raw.severity === 'WATCHING') {
     sev = 'WATCHING';
@@ -54,55 +54,14 @@ function formatEvent(raw: any, index: number): TimelineEvent {
   };
 }
 
-function EventCard({ event, selected, onClick }: { event: TimelineEvent; selected: boolean; onClick: () => void }) {
-  const cfg = severityConfig[event.severity] || severityConfig.UNKNOWN;
-
-  return (
-    <div
-      className={`flex-shrink-0 w-64 bg-card rounded-2xl border p-4 cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:card-shadow-md animate-slide-in-up ${
-        selected ? 'border-primary ring-2 ring-primary/20 card-shadow-md bg-secondary/30' : 'border-border/60 card-shadow'
-      }`}
-      style={{
-        borderLeftWidth: '3px',
-        borderLeftColor: cfg.dot,
-      }}
-      onClick={onClick}
-    >
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <span className={`text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full border ${cfg.color} ${cfg.bg} ${cfg.border}`}>
-            {event.severity}
-          </span>
-          <span className="text-[10px] text-muted-foreground font-mono">{event.timestamp}</span>
-        </div>
-        <div className="text-sm font-semibold text-foreground truncate" title={event.type}>{event.type}</div>
-        <div className="text-xs text-muted-foreground truncate font-mono">{event.ssid}</div>
-        {event.score > 0 ? (
-          <div className="flex items-center gap-2 pt-1">
-            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-              <div className="h-full rounded-full" style={{ width: `${Math.min(100, (event.score / 35) * 100)}%`, background: cfg.dot }} />
-            </div>
-            <span className="text-[10px] font-bold font-mono" style={{ color: cfg.dot }}>
-              +{event.score}
-            </span>
-          </div>
-        ) : (
-          <div className="text-[10px] text-muted-foreground font-mono">Baseline Event</div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export default function Timeline({ selectedDevice }: { selectedDevice?: string | null }) {
   const [events, setEvents] = useState<TimelineEvent[]>(defaultEvents);
   const [selectedEvent, setSelectedEvent] = useState<TimelineEvent | null>(null);
   const [filterDevice, setFilterDevice] = useState<string | null>(selectedDevice || null);
   const [severityFilter, setSeverityFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [viewMode, setViewMode] = useState<'VISUAL' | 'EXTENDED'>('VISUAL');
+  const [viewMode, setViewMode] = useState<'STREAM' | 'LEDGER'>('STREAM');
   const [isExpandedFull, setIsExpandedFull] = useState(false);
-  const [, setLoading] = useState(false);
 
   useEffect(() => {
     if (selectedDevice) {
@@ -112,7 +71,6 @@ export default function Timeline({ selectedDevice }: { selectedDevice?: string |
 
   const loadObservations = async () => {
     try {
-      setLoading(true);
       const data = await api.getObservations();
       if (Array.isArray(data) && data.length > 0) {
         const mapped = data.map(formatEvent);
@@ -122,8 +80,6 @@ export default function Timeline({ selectedDevice }: { selectedDevice?: string |
       }
     } catch {
       setEvents(defaultEvents.map(formatEvent));
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -202,24 +158,24 @@ export default function Timeline({ selectedDevice }: { selectedDevice?: string |
         <div className="flex items-center gap-2.5 flex-wrap">
           <div className="bg-card border border-border/80 rounded-xl p-0.5 flex items-center shadow-sm">
             <button
-              onClick={() => setViewMode('VISUAL')}
+              onClick={() => setViewMode('STREAM')}
               className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                viewMode === 'VISUAL'
+                viewMode === 'STREAM'
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              ◉ Flow View
+              ◉ Timeline Stream
             </button>
             <button
-              onClick={() => setViewMode('EXTENDED')}
+              onClick={() => setViewMode('LEDGER')}
               className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                viewMode === 'EXTENDED'
+                viewMode === 'LEDGER'
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              ☰ Extended Ledger
+              ☰ Audit Ledger
             </button>
           </div>
 
@@ -227,26 +183,26 @@ export default function Timeline({ selectedDevice }: { selectedDevice?: string |
             onClick={() => setIsExpandedFull(!isExpandedFull)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-border bg-card hover:bg-muted text-foreground transition-colors shadow-sm"
           >
-            {isExpandedFull ? '↙ Compact Section' : '⛶ Expand Full View'}
+            {isExpandedFull ? '↙ Compact View' : '⛶ Expand Full Screen'}
           </button>
         </div>
       </div>
 
       {/* Metric Counters Banner */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-        <div className="bg-card rounded-2xl border border-border/60 p-3.5 card-shadow">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Total Events</span>
+        <div className="bg-card rounded-2xl border border-border/60 p-4 card-shadow">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Total Logged Events</span>
           <div className="text-2xl font-bold text-foreground tabular-nums mt-1">{events.length}</div>
         </div>
-        <div className="bg-card rounded-2xl border border-status-flagged/30 bg-status-flagged-bg/30 p-3.5 card-shadow">
+        <div className="bg-card rounded-2xl border border-status-flagged/30 bg-status-flagged-bg/30 p-4 card-shadow">
           <span className="text-[10px] font-bold uppercase tracking-wider text-status-flagged">Critical Attacks</span>
           <div className="text-2xl font-bold text-status-flagged tabular-nums mt-1">{flaggedCount}</div>
         </div>
-        <div className="bg-card rounded-2xl border border-status-suspicious/30 bg-status-suspicious-bg/30 p-3.5 card-shadow">
+        <div className="bg-card rounded-2xl border border-status-suspicious/30 bg-status-suspicious-bg/30 p-4 card-shadow">
           <span className="text-[10px] font-bold uppercase tracking-wider text-status-suspicious">Anomalies</span>
           <div className="text-2xl font-bold text-status-suspicious tabular-nums mt-1">{suspiciousCount}</div>
         </div>
-        <div className="bg-card rounded-2xl border border-status-watching/30 bg-status-watching-bg/30 p-3.5 card-shadow">
+        <div className="bg-card rounded-2xl border border-status-watching/30 bg-status-watching-bg/30 p-4 card-shadow">
           <span className="text-[10px] font-bold uppercase tracking-wider text-status-watching">Proximity Signals</span>
           <div className="text-2xl font-bold text-status-watching tabular-nums mt-1">{watchingCount}</div>
         </div>
@@ -264,7 +220,7 @@ export default function Timeline({ selectedDevice }: { selectedDevice?: string |
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search historical events by rule, SSID, BSSID, or attack pattern…"
+              placeholder="Search events by attack rule, SSID, BSSID, or keywords…"
               className="w-full pl-9 pr-4 py-2 text-xs bg-muted/40 border border-border/70 rounded-xl outline-none focus:border-primary text-foreground placeholder:text-muted-foreground"
             />
           </div>
@@ -289,7 +245,7 @@ export default function Timeline({ selectedDevice }: { selectedDevice?: string |
 
         {/* Device Quick Filter Chips */}
         <div className="flex items-center gap-2 overflow-x-auto pt-1 text-xs">
-          <span className="text-muted-foreground text-[11px] font-semibold flex-shrink-0">Filter Target:</span>
+          <span className="text-muted-foreground text-[11px] font-semibold flex-shrink-0">Target Entity:</span>
           <button
             onClick={() => setFilterDevice(null)}
             className={`px-2.5 py-1 rounded-lg border text-[11px] font-medium transition-all flex-shrink-0 ${
@@ -298,7 +254,7 @@ export default function Timeline({ selectedDevice }: { selectedDevice?: string |
                 : 'bg-muted/20 border-border/60 text-muted-foreground hover:text-foreground'
             }`}
           >
-            All Airspace Entities ({events.length})
+            All Entities ({events.length})
           </button>
           {uniqueDevices.map(d => (
             <button
@@ -317,64 +273,91 @@ export default function Timeline({ selectedDevice }: { selectedDevice?: string |
         </div>
       </div>
 
-      {/* Visual Flow View Mode */}
-      {viewMode === 'VISUAL' && (
+      {/* View Mode: Timeline Stream (Connected Vertical Spine) */}
+      {viewMode === 'STREAM' && (
         <div className="space-y-4">
-          {/* Horizontal Timeline Rail */}
-          <div className="bg-card rounded-3xl border border-border/60 card-shadow-md p-6 space-y-4 overflow-hidden">
+          <div className="bg-card rounded-3xl border border-border/60 card-shadow-md p-6 space-y-6">
             <div className="flex items-center justify-between border-b border-border/50 pb-3">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Attack Escalation & Discovery Rail
+                Chronological Attack Escalation Feed
               </span>
               <span className="text-xs text-muted-foreground font-mono">
-                {sorted.length} events matched
+                Showing {sorted.length} events
               </span>
             </div>
 
-            <div className="relative overflow-x-auto pb-4 pt-2">
-              {/* Central connecting rail */}
-              <div className="absolute top-[68px] left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-500/30 via-indigo-500/40 to-red-500/40" />
+            {sorted.length === 0 ? (
+              <div className="py-12 text-center text-muted-foreground text-sm">
+                No matching events found for the active filter.
+              </div>
+            ) : (
+              <div className="relative pl-6 sm:pl-8 space-y-4">
+                {/* Continuous Vertical Spine */}
+                <div className="absolute top-3 bottom-3 left-2.5 sm:left-3.5 w-0.5 bg-gradient-to-b from-primary via-border to-transparent" />
 
-              <div className="flex gap-5 min-w-max px-2">
-                {sorted.map((event, i) => (
-                  <div key={event.id} className="relative flex flex-col items-center gap-3.5">
-                    {/* Node Dot on central rail */}
-                    <div className="relative z-10 mt-[56px]">
+                {sorted.map((event) => {
+                  const cfg = severityConfig[event.severity] || severityConfig.UNKNOWN;
+                  const isSelected = selectedEvent?.id === event.id;
+
+                  return (
+                    <div key={event.id} className="relative group">
+                      {/* Node Bullet on Spine */}
                       <div
-                        className="w-3.5 h-3.5 rounded-full border-2 border-card shadow-sm"
-                        style={{ background: severityConfig[event.severity]?.dot || '#9CA3AF' }}
+                        className="absolute -left-[23px] sm:-left-[27px] top-4 w-3.5 h-3.5 rounded-full border-2 border-card z-10 transition-transform group-hover:scale-125"
+                        style={{ background: cfg.dot }}
                       >
                         {event.severity === 'FLAGGED' && (
-                          <div
-                            className="absolute inset-0 rounded-full animate-ping"
-                            style={{ background: '#EF4444', opacity: 0.5 }}
-                          />
+                          <div className="absolute inset-0 rounded-full animate-ping opacity-60" style={{ background: '#EF4444' }} />
                         )}
                       </div>
-                    </div>
 
-                    {/* Alternating Event Cards */}
-                    <div className={i % 2 === 0 ? '-order-1' : 'order-2'}>
-                      <EventCard
-                        event={event}
-                        selected={selectedEvent?.id === event.id}
-                        onClick={() => setSelectedEvent(selectedEvent?.id === event.id ? null : event)}
-                      />
-                    </div>
+                      {/* Event Card */}
+                      <div
+                        onClick={() => setSelectedEvent(isSelected ? null : event)}
+                        className={`bg-muted/15 border rounded-2xl p-4.5 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:card-shadow-md ${
+                          isSelected
+                            ? 'border-primary bg-primary/5 ring-1 ring-primary/30 card-shadow-md'
+                            : 'border-border/60 hover:border-border'
+                        }`}
+                        style={{
+                          borderLeftWidth: '3.5px',
+                          borderLeftColor: cfg.dot,
+                        }}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-[10px] font-bold tracking-wider px-2.5 py-0.5 rounded-full border ${cfg.color} ${cfg.bg} ${cfg.border}`}>
+                              {event.severity}
+                            </span>
+                            <h3 className="text-sm font-bold text-foreground">{event.type}</h3>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground flex-shrink-0">
+                            <span className="font-semibold text-foreground">{event.timestamp}</span>
+                            <span>·</span>
+                            <span>Score: <strong style={{ color: cfg.dot }}>+{event.score}</strong></span>
+                          </div>
+                        </div>
 
-                    {/* Spacer */}
-                    {i % 2 !== 0 && <div className="-order-1 w-64 h-24" />}
-                    {i % 2 === 0 && <div className="order-2 w-64 h-24" />}
-                  </div>
-                ))}
+                        <p className="text-xs text-foreground/85 leading-relaxed pt-1">
+                          {event.description}
+                        </p>
+
+                        <div className="flex items-center gap-4 text-[11px] font-mono text-muted-foreground pt-3 border-t border-border/40 mt-3 flex-wrap">
+                          <div>Target SSID: <strong className="text-foreground">{event.ssid}</strong></div>
+                          <div>Hardware BSSID: <strong className="text-foreground">{event.bssid}</strong></div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* Extended Historical Ledger View Mode */}
-      {viewMode === 'EXTENDED' && (
+      {/* View Mode: Extended Historical Ledger */}
+      {viewMode === 'LEDGER' && (
         <div className="bg-card rounded-3xl border border-border/70 card-shadow-md overflow-hidden space-y-0">
           <div className="p-5 border-b border-border/60 flex items-center justify-between">
             <div>
