@@ -14,10 +14,17 @@ venv/
 
 # --- Runtime data (regenerated, don't commit) ---
 data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
 backend/*.db*
 backend/*.log
 *.log
+*cookie*.txt
 *cookies*.txt
+
 
 
 # --- Dashboard (once Phase 5 lands) ---
