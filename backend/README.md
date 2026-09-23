@@ -1,101 +1,54 @@
-# ORBIT backend
+# ORBIT Backend & Detection Engine
 
-## What's built
+The backend processes incoming 802.11 and BLE frames from dual ESP32 nodes (or the built-in mock RF simulator), extracts structured management/EAPOL headers, scores anomalies through an explainable multi-signal state machine, persists threat history in SQLite, and provides a real-time FastAPI + WebSocket service to the dashboard.
 
-- `orbit/ingestion/frame_source.py` — abstraction over "where frames come
-  from." `SerialFrameSource` (real hardware, not usable yet),
-  `ProcessFrameSource` (runs the mock generator as a subprocess and streams
-  its stdout), `FileFrameSource` (replays a saved capture file). Downstream
-  code only ever talks to this interface.
-- `orbit/ingestion/serial_reader.py` — one reader thread per node, both
-  feeding a shared bounded queue. Timestamps every frame at laptop-receipt
-  time (not the ESP32's clock). Drops and logs malformed JSON instead of
-  crashing.
-- `orbit/parsing/frame_parser.py` — full 802.11 IE decode: SSID, DS
-  Parameter Set (channel), capability info, RSN IE, WPS vendor IE presence.
-- `orbit/parsing/rsn_parser.py` — RSN IE breakdown: group/pairwise cipher
-  suites, AKM suites, PMF capable/required bits.
-- `orbit/parsing/oui_lookup.py` — static BSSID → vendor name table.
-- `scripts/mock/` — the mock sensor node. `mock_sniffer.py` simulates both
-  the channel-hopping (Node A) and parked (Node B) behavior from the real
-  firmware, and plays out a scripted scenario: a trusted AP, an untrusted
-  background AP, and an evil twin of the trusted AP that goes live after
-  `--evil-twin-at` seconds (default 20s) plus a deauth burst against a
-  simulated client. Output is JSON lines, identical in shape to what
-  `orbit_sniffer_emit()` sends over serial on real hardware.
-- `orbit/detection/whitelist.py` — in-memory trusted SSID+BSSID whitelist.
-- `orbit/detection/state_machine.py` — per-device Unknown → Watching →
-  Suspicious → Flagged state machine.
-- `orbit/detection/evidence.py` — Stage 1 evidence rules: SSID collision,
-  security downgrade, channel mismatch, RSSI anomaly, and deauth tracking.
-- `orbit/detection/engine.py` — main Stage 1 detection loop. It consumes the
-  ingestion queue, scores frames, updates device state, and prints alerts with
-  full evidence breakdown.
-- `scripts/run_pipeline.py` — current midsem demo entry point. It wires mock
-  Node A + Node B into ingestion and detection.
+---
 
-## Not built yet
+## 🏗️ Architecture
 
-- `orbit/storage/`, `orbit/api/` — SQLite schema + FastAPI app
-- Karma and WPA handshake-capture-attempt detection
-- Anything BLE, heatmap, or AI-layer
+- **`orbit/ingestion/`**:
+  - `frame_source.py`: Unified abstraction for `SerialFrameSource` (Node A COM port), `NetworkFrameSource` (Node B TCP/UDP forwarder), and `ProcessFrameSource` (Mock simulator).
+  - `serial_reader.py`: Multi-threaded bounded queue ingestion with host-level microsecond timestamping.
+- **`orbit/parsing/`**:
+  - `frame_parser.py`: 802.11 management frame and synthetic EAPOL parser.
+  - `rsn_parser.py`: Robust Security Network (RSN) Information Element (IE) decoder for cipher suites, AKM, and PMF validation.
+  - `oui_lookup.py`: Static BSSID/MAC OUI hardware vendor resolution.
+- **`orbit/detection/`**:
+  - `engine.py`: Central detection coordinator. Dispatches frames to evidence checkers, updates `DeviceRegistry`, and triggers alert callbacks.
+  - `evidence.py`: Heuristics for SSID collisions, security downgrades, channel mismatches, and deauth burst tracking.
+  - `karma.py`: Stateful multi-SSID probe-response Karma attack detector.
+  - `handshake.py`: Correlates targeted client deauth bursts with subsequent 4-way WPA EAPOL handshakes.
+  - `ble_correlation.py`: Multi-radio correlation between Wi-Fi rogue signal strength and co-located BLE advertisement RSSI.
+  - `anomaly.py`: Z-score statistical anomaly detection over moving RSSI baselines.
+  - `narration.py`: Natural-language AI threat narrator with Ollama LLM integration and deterministic security rule fallback.
+  - `heatmap.py`: KNN spatial signal model for 2D coordinate trilateration.
+- **`orbit/storage/`**:
+  - `db.py`: SQLite connection management (WAL mode) and schema migrations.
+  - `queries.py`: Queries for device upserts, alert resolution lifecycle, and whitelist management.
+- **`orbit/api/`**:
+  - `main.py`: FastAPI application exposing REST endpoints (`/devices`, `/alerts`, `/whitelist`, `/health`, `/heatmap`, `/auth`) and `/ws/live` real-time WebSocket channel.
 
-## Running the current Stage 1 pipeline
+---
 
+## 🚀 Running the Backend
+
+### Standalone with Mock Simulation:
 ```bash
-cd backend
-python -m scripts.run_pipeline --evil-twin-at 10 --speed 5 --duration 60
+python -m scripts.run_pipeline --mode mock --api --port 8000 --speed 5.0
 ```
 
-You can also run the same entry point from the repository root:
+### Options:
+- `--mode {mock,hardware}`: Switch between simulated RF environment and live ESP32 serial readers.
+- `--api`: Starts the FastAPI server and WebSocket manager on `--port` (default: 8000).
+- `--evil-twin-at N`: Starts evil twin attack after N seconds (default: 10.0s).
+- `--speed N`: Simulation speed multiplier (default: 5.0x).
+- `--duration N`: Runtime in seconds (0 = run forever).
 
+---
+
+## 🧪 Testing
+
+Run pytest across all backend test modules:
 ```bash
-python3 backend/scripts/run_pipeline.py --evil-twin-at 10 --speed 5 --duration 60
+python -m pytest tests/
 ```
-
-Expected result: the engine starts, the trusted `HomeNet-5G` AP is learned,
-the evil twin appears, and ORBIT prints one alert with evidence breakdown.
-
-## Running only the mock sniffers manually
-
-Terminal 1:
-```bash
-python -m scripts.mock.mock_sniffer --node A
-```
-
-Terminal 2:
-```bash
-python -m scripts.mock.mock_sniffer --node B
-```
-
-Each prints one JSON line per captured frame to stdout. To wire both into
-the shared ingestion queue instead of just eyeballing stdout:
-
-```python
-from orbit.ingestion.frame_source import ProcessFrameSource
-from orbit.ingestion.serial_reader import IngestionQueue, start_readers
-from orbit.parsing.frame_parser import parse_frame
-import sys, time
-
-sink = IngestionQueue()
-sources = [
-    ProcessFrameSource("A", [sys.executable, "-m", "scripts.mock.mock_sniffer", "--node", "A"]),
-    ProcessFrameSource("B", [sys.executable, "-m", "scripts.mock.mock_sniffer", "--node", "B"]),
-]
-start_readers(sources, sink)
-
-while True:
-    item = sink.get(timeout=5)
-    parsed = parse_frame(item.envelope, item.laptop_recv_ts)
-    print(parsed)
-```
-
-Useful mock flags while testing:
-- `--speed 20` — runs 20x faster than real time (good for quick iteration)
-- `--evil-twin-at 5` — evil twin goes live after 5s instead of the default 20s
-- `--seed <int>` — change the RSSI-noise seed if you want a different run
-
-## Once real hardware is flashed (Phase 1 done)
-
-Swap `ProcessFrameSource` for `SerialFrameSource(node_id, port)` — nothing
-else in ingestion or parsing changes.
